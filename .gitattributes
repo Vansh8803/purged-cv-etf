@@ -1,0 +1,14 @@
+# Normalize text in the repository, check out native on each machine.
+* text=auto
+
+# Source and config stay LF everywhere, so a WSL checkout and a Windows
+# checkout of the same commit are byte-identical.
+*.py   text eol=lf
+*.md   text eol=lf
+*.yaml text eol=lf
+*.txt  text eol=lf
+
+# The cached price data is evidence. Never let git rewrite a byte of it:
+# line-ending conversion would change the file's hash and quietly break the
+# claim that the numbers came from this exact download.
+*.csv -text
