@@ -1,0 +1,28 @@
+# Virtual environment — rebuild it from requirements.lock.txt instead.
+.venv/
+venv/
+
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.pytest_cache/
+.ipynb_checkpoints/
+
+# Derived data. data/raw/ IS committed on purpose — the cached CSVs are the
+# dated evidence of what we downloaded, and Yahoo restates adjusted prices
+# after the fact. Anything computed FROM them is regenerable, so it stays out.
+data/interim/
+data/processed/
+
+# Scratch output. Figures and the precomputed JSON grid get committed
+# deliberately when they are final, not incidentally while iterating.
+outputs/
+scratch/
+
+# OS / editor
+Thumbs.db
+desktop.ini
+.DS_Store
+.vscode/
+.idea/

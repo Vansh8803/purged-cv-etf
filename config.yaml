@@ -1,0 +1,26 @@
+# Single source of truth for every parameter that could be fiddled with.
+# Committed on 2026-10-14, before any modelling, so the holdout dates are a
+# dated commitment rather than a choice made after seeing results.
+
+universe: [SPY, QQQ, IWM, TLT, GLD]
+
+data:
+  start: 2005-01-01
+  end: 2025-12-31
+  raw_dir: data/raw          # read from here; never re-download mid-project
+
+label:
+  horizon_days: 10           # vertical barrier
+  vol_lookback_days: 20      # barriers are +/- 1 x this volatility
+  barrier_mult: 1.0
+  timeout_is_negative: true  # a timeout counts as "target not reached"
+
+split:
+  holdout_start: 2023-01-01  # DECLARED 2026-10-14. Do not open until the end.
+  holdout_end: 2025-12-31
+  n_folds: 5
+  embargo_frac: 0.01         # swept 0 to 20 days for the sensitivity analysis
+
+costs_bps: [0, 5, 10]
+
+seed: 20261014
