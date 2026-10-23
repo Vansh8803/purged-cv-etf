@@ -220,19 +220,24 @@ AI assistance this session: Claude for auditing the environment, for the
 lockfile and README, for the GLD observation above, and for drafting the work
 split. The naming decision and the acceptance of each change were ours.
 
----
 
+### 2026-10-24 · High and Low scaled by Adjusted Close factor
+
+We will synthesize an adjusted high and adjusted low by multiplying the raw High and Low columns by the factor `(Adj Close / Close)` before computing barrier touches.
+
+Mixing raw intraday prices with a volatility threshold `sigma_t` derived from adjusted returns is a trap. Without scaling, a scheduled dividend drop would trigger a false lower-barrier stop-loss on SPY, QQQ, IWM, and TLT. While proportional scaling is a mathematical approximation of intraday dividend effects, it allows us to cleanly vectorize the label generation. The alternative—running strictly on raw prices and writing a discrete cash-management module to handle dividend reinvestment—pulls engineering time away from the evaluation machinery. GLD distributes nothing, so its adjustment factor is exactly 1.0; it will serve as the unit test for our scaling logic.
+
+### 2026-10-24 · Per-ticker models chosen over pooled modeling
+
+We will train and evaluate five separate models rather than concatenating all five ETFs into a single 25,000-row master dataset.
+
+Cross-sectional data leakage. Because the ETFs share calendar dates, pooling them means a test fold evaluating QQQ in March 2018 would leave SPY's concurrent March 2018 data in the training set, allowing the model to cheat by reading the macro market's simultaneous reaction. Preventing this would require our `PurgedKFold` to drop the overlapping dates across all tickers simultaneously, carving massive 10-day holes out of the entire universe and severely cannibalizing the effective sample size. We sacrifice the predictive power of a larger dataset to guarantee mathematically clean, strictly 1D time-based purging.
+
+---
 ## Open questions
 
 Move these into the log as dated entries once decided.
 
-- **Pooled or per-ticker?** One model across all five ETFs, or five models?
-  Pooling worsens the overlap problem above. Not yet decided.
-- **OHLC adjustment consistency.** We cache raw OHLC *and* Adj Close. The raw
-  high and low are what the price actually touched; Adj Close is what returns
-  should come from. Mixing them is a real trap. Decide whether to scale High
-  and Low by the factor (Adj Close / Close) before computing barriers, and
-  record the reason.
 - **JSON size for the website.** Precomputing all 2 × 21 × 21 × 2 = 1,764
   slider combinations as full equity curves is hundreds of megabytes. Plan:
   ship the ~42 position series (purging × embargo) and apply cost and
