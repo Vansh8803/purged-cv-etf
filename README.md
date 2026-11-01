@@ -89,10 +89,22 @@ a price level was *touched* intraday, not on where the day closed.
 
 ## Running things
 
-Nothing to run yet beyond the downloader. Build order is step-by-step in
-[`project_details.md`](project_details.md#build-order); steps 1 and 3
-(triple-barrier labelling with the `t1` column, and `PurgedKFold`) come before
-anything else and get tested harder than feels necessary.
+Features, then labels. Both read `data/raw/` and write `data/processed/`,
+which is gitignored because it is regenerable — so run these two on a fresh
+clone before anything else.
+
+```powershell
+python src/data_process.py        # OHLCV -> features, shifted one bar
+python scripts/build_labels.py    # features -> barriers, label, t1
+python scripts/report_uniqueness.py   # how much independent data we actually have
+```
+
+`build_labels.py` takes every parameter from `config.yaml` and prints a
+per-ticker summary over pre-holdout rows only.
+
+Steps 1 and 2 are done. Remaining build order is step-by-step in
+[`project_details.md`](project_details.md#build-order). Step 3 (`PurgedKFold`)
+is next and gets tested harder than feels necessary.
 
 Tests, once there are any:
 
