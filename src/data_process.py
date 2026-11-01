@@ -1,6 +1,10 @@
 import pandas as pd
 import numpy as np
-import os
+from pathlib import Path
+
+import yaml
+
+ROOT = Path(__file__).resolve().parents[1]
 
 def engineer_features(df):
     # 1. Price Adjustments (from your Oct 24 decision)
@@ -42,26 +46,43 @@ def engineer_features(df):
     
     return df
 
+def latest_raw(ticker):
+    """Newest cached download for a ticker.
+
+    download_data.py --force writes a NEW date-stamped file rather than
+    overwriting the old one, so the stamp cannot be hard-coded here.
+    """
+    matches = sorted((ROOT / "data" / "raw").glob(f"{ticker}_*.csv"))
+    return matches[-1] if matches else None
+
+
 def process_all_tickers():
-    tickers = ['SPY', 'QQQ', 'IWM', 'TLT', 'GLD']
-    os.makedirs('data/processed', exist_ok=True)
-    
-    # Matching the exact download suffix from your raw data directory
-    file_suffix = "_2005-01-01_2025-12-31_dl2026-10-16.csv"
-    
-    for ticker in tickers:
-        raw_filepath = f'data/raw/{ticker}{file_suffix}'
-        
-        if os.path.exists(raw_filepath):
-            df = pd.read_csv(raw_filepath, index_col='Date', parse_dates=True)
-            df_featured = engineer_features(df)
-            
-            # Save to processed directory as CSV
-            processed_filepath = f'data/processed/{ticker}_features.csv'
-            df_featured.to_csv(processed_filepath)
-            print(f"Successfully processed {ticker} -> {processed_filepath}")
-        else:
-            print(f"Warning: Could not find {raw_filepath}")
+    cfg = yaml.safe_load((ROOT / "config.yaml").read_text())
+    out_dir = ROOT / "data" / "processed"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    missing = []
+    for ticker in cfg["universe"]:
+        raw_filepath = latest_raw(ticker)
+
+        if raw_filepath is None:
+            print(f"Warning: no cached raw file for {ticker}")
+            missing.append(ticker)
+            continue
+
+        df = pd.read_csv(raw_filepath, index_col='Date', parse_dates=True)
+        df_featured = engineer_features(df)
+
+        processed_filepath = out_dir / f'{ticker}_features.csv'
+        df_featured.to_csv(processed_filepath)
+        print(f"Successfully processed {ticker} -> {processed_filepath.relative_to(ROOT)}")
+
+    if missing:
+        print()
+        print(f"FAILED: no raw data for {missing}. Run scripts/download_data.py.")
+        return 1
+    return 0
+
 
 if __name__ == "__main__":
-    process_all_tickers()
+    raise SystemExit(process_all_tickers())
