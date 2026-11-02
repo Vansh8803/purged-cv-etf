@@ -26,7 +26,7 @@ Update this block whenever an entry below changes it.
 | Bar frequency | Daily | 2026-10-14 |
 | Target | Binary: profit target reached before stop loss | 2026-10-14 |
 | Horizon | 10 trading days | 2026-10-14 |
-| Barrier width | ±1 × 20-day realized volatility | 2026-10-14 |
+| Barrier width | ±2.5 × 20-day realized volatility, in log space | 2026-11-01 |
 | Holdout | 2023-01-01 to 2025-12-31, UNOPENED | 2026-10-14 |
 | Primary CV | Purged 5-fold, embargo ≈1% of sample | 2026-10-14 |
 | Control CV | Standard 5-fold K-fold | 2026-10-14 |
@@ -36,9 +36,15 @@ Update this block whenever an entry below changes it.
 ## Trial counter
 
 The DSR needs the number of configurations actually tested. Increment this
-every time a new combination is evaluated — feature set, barrier width,
-horizon, embargo length, model type, hyperparameter grid point. Undercounting
-makes the headline number worthless.
+every time a combination is **scored** — feature set, barrier width, horizon,
+embargo length, model type, hyperparameter grid point. Undercounting makes the
+headline number worthless.
+
+What counts is a configuration we got a performance number out of and could
+therefore have selected on. Building a feature, or comparing barrier widths on
+label statistics like uniqueness or timeout rate, produces nothing to select
+on and is not a trial. The counter starts moving at step 6, when models are
+first scored.
 
 **Configurations evaluated so far: 0**
 
@@ -233,6 +239,139 @@ We will train and evaluate five separate models rather than concatenating all fi
 
 Cross-sectional data leakage. Because the ETFs share calendar dates, pooling them means a test fold evaluating QQQ in March 2018 would leave SPY's concurrent March 2018 data in the training set, allowing the model to cheat by reading the macro market's simultaneous reaction. Preventing this would require our `PurgedKFold` to drop the overlapping dates across all tickers simultaneously, carving massive 10-day holes out of the entire universe and severely cannibalizing the effective sample size. We sacrifice the predictive power of a larger dataset to guarantee mathematically clean, strictly 1D time-based purging.
 
+### 2026-11-01 · Barrier width raised from 1.0 to 2.5 sigma
+
+We changed `barrier_mult` from 1.0 to 2.5 in `config.yaml`.
+
+At 1.0 the label was broken in a way that would have quietly wrecked the whole
+project. A barrier one daily sigma wide is narrower than a typical day's
+high-to-low range, so almost everything touched immediately: the median
+holding period was **1 bar**, 52% of labels resolved on t+1, and the vertical
+barrier bound on under 1% of rows. Label windows that short barely overlap, so
+purging would have had almost nothing to purge and the K-fold-to-purged gap --
+the headline result -- would have come out near zero. That would have been an
+artifact of the barrier width, not a finding about cross-validation.
+
+It also contradicted our own metric choice. `project_details.md` says labels
+are imbalanced and that is why precision is primary; at 1.0 the measured
+balance was 48-52% on all five ETFs.
+
+We compared 2.5 against sqrt(10) = 3.162, the width where the barrier matches
+a typical 10-day move. Averaged over the five ETFs, pre-holdout:
+
+| mult | label 1 | timeout | mean t1-t | avg uniqueness | effective N |
+| --- | --- | --- | --- | --- | --- |
+| 1.0 | 0.520 | 0.9% | 1.9 bars | 0.362 | 1558 |
+| 2.5 | 0.405 | 27% | 5.6 bars | 0.160 | 690 |
+| 3.162 | 0.304 | 44% | 6.7 bars | 0.135 | 579 |
+
+2.5 wins on two counts. It keeps about 19% more effective sample, and sample
+size is the binding constraint on this project rather than model capacity. And
+at 3.162 nearly half of all labels are timeouts, meaning half the data carries
+no information about direction at all.
+
+The cost is real and goes in the limitations section: effective sample size
+drops from 1558 to 690. Wider barriers mean longer label windows, more overlap,
+and less independent data. That is the correct trade -- the overlap is the thing
+we are studying -- but it is a cost.
+
+### 2026-11-01 · A same-bar tie counts as label 1
+
+When the high clears the upper barrier and the low breaks the lower barrier on
+the same bar, we label it 1.
+
+Daily bars cannot tell us which level was touched first, so this is a choice
+rather than a measurement. We take 1 because the upper barrier is the side we
+would actually have acted on -- the position is opened for the profit target,
+and a bar that reached it counts as reaching it. The alternative, calling every
+ambiguous bar 0, is more conservative but it systematically throws away exactly
+the volatile bars where the signal lives.
+
+This matters more now than it used to. At the old 1.0 width ties were rare; at
+2.5 the barriers are wide enough that a bar touching both is a genuinely large
+day, and those are not rows we want to mislabel by default. Worth revisiting
+with intraday data, which we do not have.
+
+### 2026-11-01 · t1 counts trading bars, and unresolved rows are dropped
+
+Two fixes to the labelling code, both in `src/labels.py`.
+
+**t1 was in calendar days.** The timeout date was `t + pd.Timedelta(days=10)`,
+so for a Thursday t it returned a Sunday -- not a trading date at all. Purging
+is *defined* as an overlap test on `[t, t1]`, so a t1 that is not a bar makes
+every purge decision slightly wrong. It is now a positional offset of 10 bars
+in the index, and there is a test asserting every t1 is a real bar. At the old
+barrier width this only hit 0.9% of rows; at 2.5 it would have hit 28%.
+
+**The last rows were labelled as timeouts.** Shifting the future off the end of
+the series gives NaN, NaN comparisons are False, so the final rows registered
+no touch and fell through to "timeout, label 0". They were not timeouts, they
+just had no future to look at. We now drop any row whose t1 would land past the
+end of the data. A row that genuinely touches a barrier inside the data we have
+is kept, so this drops 2 to 10 rows per ticker rather than a blanket 10.
+
+### 2026-11-01 · Barriers computed in log-return space
+
+`sigma_t` is the standard deviation of daily *log* returns, so the barriers are
+a log move off day t's close:
+
+    upper = close_t * exp(+2.5 * sigma_t)
+    lower = close_t * exp(-2.5 * sigma_t)
+
+`project_details.md` said "cumulative return from the close of t", which could
+have been read as `close * (1 +/- 2.5 * sigma)`. In simple-return space the up
+move and the down move are different sizes in log terms, so the label would
+inherit a small upward bias that has nothing to do with the market. Log space
+makes the two barriers exact mirrors: `upper * lower == close^2`, which is now
+asserted in a test.
+
+Everything else in the pipeline already used log returns -- the features, the
+volatility, the vol-of-vol -- so this just removes the one place it was
+ambiguous. Labels and barriers are written to
+`data/processed/{ticker}_labelled.csv` by `scripts/build_labels.py`, which
+reads every parameter from `config.yaml` rather than hard-coding it.
+
+### 2026-11-01 · Step 2 done: we have about one-sixth of the data we thought
+
+`src/uniqueness.py` computes concurrency, per-label uniqueness and effective
+sample size. Numbers below are pre-holdout, per ticker, at barrier_mult 2.5.
+
+| ticker | rows | avg uniqueness | effective N |
+| --- | --- | --- | --- |
+| SPY | 4302 | 0.1563 | 672 |
+| QQQ | 4304 | 0.1585 | 682 |
+| IWM | 4302 | 0.1548 | 666 |
+| TLT | 4307 | 0.1477 | 636 |
+| GLD | 4303 | 0.1523 | 656 |
+
+So roughly 4,300 rows per ticker carry about as much independent information as
+660 unrelated observations. Mean concurrency is about 7, meaning a typical
+trading day sits inside seven different label windows at once.
+
+This is the number that justifies the project. If labels were independent,
+standard K-fold would be defensible and there would be nothing to measure. At
+0.15 uniqueness, almost every training row overlaps the test fold it is being
+scored against, which is exactly the leakage purging removes.
+
+It also changes what we can claim. Every standard error in the write-up has to
+be read against ~660, not ~4,300 -- error bars are about 2.5x wider than the
+row count suggests. Model choice follows too: the 2026-10-14 decision against a
+neural network was argued from usable sample size, and 660 effective
+observations makes that argument much stronger than it looked at the time.
+
+Two checks that it works. Max concurrency comes out at exactly 11 on all five
+tickers, which is the theoretical ceiling -- a window [t, t+10] spans 11 bars,
+so at most 11 windows can cover one bar. And the five tickers land within 0.011
+of each other, which is what we would expect from the same horizon applied to
+five different price series.
+
+One API decision worth recording: `average_uniqueness` requires the trading
+calendar as an explicit argument rather than inferring it from the labels. A
+window's length is only meaningful in bars, and the (t, t1) dates alone do not
+pin the calendar down -- t1 can point past the last labelled row, and gaps in
+that date set silently shorten every window measured against it. A test caught
+this, and the function now raises instead of guessing.
+
 ---
 ## Open questions
 
@@ -245,8 +384,8 @@ Move these into the log as dated entries once decided.
 - **Is the DSR a live number or a fixed one?** It depends on the total trial
   count, which is a property of the whole project, not of a slider position.
   Probably display it fixed, with the per-configuration Sharpe live.
-- **Final feature list.** Currently about eight. Each one added is a new
-  configuration for the trial counter.
+- **Final feature list.** Currently about eight. They only enter the trial
+  counter once feature sets are scored against each other at step 6.
 - **Split of work between Vansh and Aksh.** Both must be able to derive
   purging and the DSR — the viva asks each of us separately. Do not split it
   as "one codes, one does the website".

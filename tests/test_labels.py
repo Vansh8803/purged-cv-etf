@@ -1,44 +1,122 @@
+from pathlib import Path
+
 import pandas as pd
 import numpy as np
-from src.labels import compute_labels
+from src.labels import compute_barriers, compute_labels
 
-def test_triple_barrier_scenarios():
-    # 1. Create a 15-day trading calendar (skips weekends)
-    dates = pd.bdate_range(start='2026-10-01', periods=15)
-    
-    # 2. Build the toy dataframe with a flat baseline of 100
+ROOT = Path(__file__).resolve().parents[1]
+
+
+def toy(periods=30):
+    """Flat series at 100, barriers at 105 / 95, on a weekday calendar.
+
+    Highs and lows sit at 101 / 99 so nothing touches unless a test moves it.
+    """
+    dates = pd.bdate_range(start='2026-10-01', periods=periods)
     df = pd.DataFrame(index=dates)
     df['adj_high'] = 101.0
     df['adj_low'] = 99.0
-    
-    # 3. Set static barriers at 105 and 95 (representing +/- 5% volatility)
     df['upper_barrier'] = 105.0
     df['lower_barrier'] = 95.0
-    
-    # --- SCENARIO A: Upper barrier hit (Price shoots up on day 3) ---
-    df.loc[dates[3], 'adj_high'] = 106.0
-    
-    # --- SCENARIO B: Lower barrier hit (Price tanks on day 7) ---
-    df.loc[dates[7], 'adj_low'] = 94.0
-    
-    # --- SCENARIO C: Timeout (Price stays flat from day 10 onwards) ---
-    # (No manual intervention needed, highs/lows stay at 101/99)
-    
-    # 4. Run the vectorised labelling function
-    df_labelled = compute_labels(df, horizon=10)
-    
-    # 5. Assert Scenario A (Evaluated from day 0)
-    # Day 0 looks forward. Day 3 is within the 10-day window and hits the upper barrier.
-    assert df_labelled.loc[dates[0], 'label'] == 1, "Failed to label upper barrier touch"
-    assert df_labelled.loc[dates[0], 't1'] == dates[3], "Failed to record correct upper touch date"
-    
-    # 6. Assert Scenario B (Evaluated from day 5)
-    # Day 5 looks forward. Day 7 hits the lower barrier first.
-    assert df_labelled.loc[dates[5], 'label'] == 0, "Failed to label lower barrier touch as 0"
-    assert df_labelled.loc[dates[5], 't1'] == dates[7], "Failed to record correct lower touch date"
-    
-    # 7. Assert Scenario C (Evaluated from day 10)
-    # Day 10 looks forward. Window ends at day 14 (if horizon is limited to available data) 
-    # or hits the timeout constraint. Neither barrier is touched.
-    # Note: If your function pads missing future data, adjust the expected timeout date.
-    assert df_labelled.loc[dates[10], 'label'] == 0, "Failed to label timeout as 0"
+    return df, dates
+
+
+def test_upper_lower_and_timeout():
+    df, d = toy()
+    df.loc[d[3], 'adj_high'] = 106.0    # upper touched 3 bars after d[0]
+    df.loc[d[7], 'adj_low'] = 94.0      # lower touched 2 bars after d[5]
+    out = compute_labels(df, horizon=10)
+
+    assert out.loc[d[0], 'label'] == 1
+    assert out.loc[d[0], 't1'] == d[3]
+
+    assert out.loc[d[5], 'label'] == 0
+    assert out.loc[d[5], 't1'] == d[7]
+
+    # d[15] sees neither barrier, so it times out.
+    assert out.loc[d[15], 'label'] == 0
+
+
+def test_timeout_t1_is_ten_trading_bars():
+    # The bug this guards: t + 10 CALENDAR days lands on a weekend and is not a
+    # date in the index at all. Purging is defined on t1, so it has to be a bar.
+    df, d = toy()
+    out = compute_labels(df, horizon=10)
+
+    assert out.loc[d[0], 't1'] == d[10]
+    # Every t1 is a real bar. It may sit past the last labelled row -- a row
+    # near the end can resolve on a bar that is itself too late to label.
+    assert out['t1'].isin(d).all()
+
+
+def test_same_bar_tie_is_labelled_one():
+    # Both barriers touched on the same bar: we call it 1, because the upper
+    # barrier is the side we would have acted on.
+    df, d = toy()
+    df.loc[d[3], 'adj_high'] = 106.0
+    df.loc[d[3], 'adj_low'] = 94.0
+    out = compute_labels(df, horizon=10)
+
+    assert out.loc[d[0], 'label'] == 1
+    assert out.loc[d[0], 't1'] == d[3]
+
+
+def test_touch_on_first_bar():
+    df, d = toy()
+    df.loc[d[1], 'adj_high'] = 106.0
+    out = compute_labels(df, horizon=10)
+
+    assert out.loc[d[0], 'label'] == 1
+    assert out.loc[d[0], 't1'] == d[1]
+
+
+def test_touch_beyond_horizon_is_a_timeout():
+    # 11 bars out is outside a 10-bar window and must not count.
+    df, d = toy()
+    df.loc[d[11], 'adj_high'] = 106.0
+    out = compute_labels(df, horizon=10)
+
+    assert out.loc[d[0], 'label'] == 0
+    assert out.loc[d[0], 't1'] == d[10]
+
+
+def test_unresolved_tail_rows_are_dropped():
+    # The last rows have no forward bars, so they cannot time out honestly.
+    # A row that genuinely touches inside the data we have is still kept.
+    df, d = toy(periods=15)
+    df.loc[d[14], 'adj_high'] = 106.0   # d[13] touches one bar later
+    out = compute_labels(df, horizon=10)
+
+    assert out.index[-1] == d[13]
+    assert out.loc[d[13], 'label'] == 1
+    assert out.loc[d[13], 't1'] == d[14]
+    assert d[14] not in out.index
+
+
+def test_barriers_are_symmetric_log_moves():
+    df = pd.DataFrame({
+        'Adj Close': [100.0] * 25,
+        'log_return': [0.01, -0.01] * 12 + [0.01],
+    }, index=pd.bdate_range('2026-10-01', periods=25))
+    out = compute_barriers(df, barrier_mult=2.5, vol_lookback=20)
+
+    row = out.dropna(subset=['sigma']).iloc[0]
+    assert np.isclose(row['upper_barrier'] * row['lower_barrier'], 100.0 ** 2)
+    assert row['lower_barrier'] < 100.0 < row['upper_barrier']
+
+
+def test_gld_adjustment_factor_is_one():
+    # GLD distributes nothing, so Adj Close == Close and the scaled high/low
+    # must equal the raw high/low exactly. A bug in the scaling path shows up
+    # here as a difference between GLD and the other four.
+    raw = pd.read_csv(
+        ROOT / 'data/raw/GLD_2005-01-01_2025-12-31_dl2026-10-16.csv',
+        index_col='Date', parse_dates=True,
+    )
+    factor = raw['Adj Close'] / raw['Close']
+    assert (factor == 1.0).all()
+
+    # Same scaling data_process.py applies. Derived from raw here on purpose:
+    # data/processed/ is gitignored, so the test must not depend on it.
+    assert np.allclose(raw['High'] * factor, raw['High'])
+    assert np.allclose(raw['Low'] * factor, raw['Low'])

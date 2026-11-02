@@ -10,9 +10,9 @@ data:
   raw_dir: data/raw          # read from here; never re-download mid-project
 
 label:
-  horizon_days: 10           # vertical barrier
-  vol_lookback_days: 20      # barriers are +/- 1 x this volatility
-  barrier_mult: 1.0
+  horizon_days: 10           # vertical barrier, in trading bars
+  vol_lookback_days: 20      # sigma_t = std of daily log returns over this window
+  barrier_mult: 2.5          # barriers are close_t * exp(+/- mult * sigma_t)
   timeout_is_negative: true  # a timeout counts as "target not reached"
 
 split:
