@@ -372,11 +372,68 @@ pin the calendar down -- t1 can point past the last labelled row, and gaps in
 that date set silently shorten every window measured against it. A test caught
 this, and the function now raises instead of guessing.
 
+### 2026-11-03 · A test block's reach is its maximum t1
+
+Decided (Aksh): when PurgedKFold purges around a test fold, that fold's span is
+`[first test row's t, the largest t1 among the test rows]`, not
+`[first test row's t, last test row's t]`.
+
+A test label resolves up to `horizon` bars after its own row, so the stretch of
+history a fold occupies runs past its last row. A training row starting in that
+tail -- after the final test row, but on or before the last test label's
+resolution date -- has a label window overlapping a test label. Measured by row
+dates alone it survives the purge while holding part of the answer, and the
+embargo would hide that rather than fix it: at embargo 0 the leak comes back in
+full, which is precisely the setting the sensitivity sweep runs.
+
+`src/purging.py` exposes this as `block_span()` rather than leaving it inline,
+because the walk-forward splitter at step 4 faces the identical choice and the
+two must not diverge.
+
+### 2026-11-03 · Embargo bounds, and what sets its length
+
+Decided (Aksh): the embargo drops training rows starting in
+`(test_end, test_end + embargo]` -- exclusive at the start, inclusive at the
+end, counted in trading bars rather than calendar days, and clipped at the end
+of the sample rather than running off the index.
+
+Exclusive at the start because `test_end` is already purged by the overlap rule
+above, so including it again would be double counting. Inclusive at the end so
+that an embargo of 1 actually withholds one bar; the off-by-one the other way
+would make a 1-bar embargo a silent no-op, and the sweep starts at the low end
+where that would matter most. Counted in bars for the same reason `t1` is: a
+calendar offset lands on weekends and holidays, which are not rows.
+
+The reason usually given for an embargo is serial correlation, which is true but
+vague. The concrete one here is that our features include 20-day rolling
+windows, so a training row just after a test fold has features computed from
+bars inside it. That also gives the length a principled floor: at least the
+longest feature lookback. `embargo_frac` of 0.01 gives 43 bars on the
+pre-holdout sample, comfortably above the 20 that the rolling features need.
+The 200-day moving average cannot be covered by any embargo we could afford and
+belongs in limitations.
+
 ---
 ## Open questions
 
 Move these into the log as dated entries once decided.
 
+- **Is the control shuffled or contiguous?** The most urgent one: it decides
+  what the headline number is, so it wants settling before step 6 scores
+  anything. `project_details.md` calls the control "standard 5-fold K-fold",
+  and sklearn's `KFold` does not shuffle by default. Measured at our shape —
+  4,302 rows, horizon 10, 5 folds — a contiguous control leaves 0.5% of
+  training rows overlapping their test fold and touches 1.9% of test rows;
+  shuffled, the same counts are 99.9% and 100%. Purging strips only 0.3% of
+  training rows out of a contiguous control, so read that way the
+  K-fold-to-purged gap comes out near zero and the result is an artifact of
+  fold geometry rather than a finding — the same shape of problem as the 1.0
+  barrier width. Note this cuts against our own explainer, which says the leak
+  "has nothing to do with shuffling": qualitatively true, since 80 rows do leak
+  with contiguous folds, but 0.5% against 99.9% is not the same claim. Options:
+  run both controls and report the pair, which costs one row in every table and
+  makes the fold-geometry point explicit, or declare shuffled K-fold the
+  control because it is what someone naive to time-ordered data actually does.
 - **JSON size for the website.** Precomputing all 2 × 21 × 21 × 2 = 1,764
   slider combinations as full equity curves is hundreds of megabytes. Plan:
   ship the ~42 position series (purging × embargo) and apply cost and
