@@ -47,14 +47,20 @@ Binary. For each day *t*:
 
 1. Compute `sigma_t`, the standard deviation of daily log returns over the
    previous 20 days, using data up to and including *t*.
-2. Set an upper barrier at `+1.0 × sigma_t` and a lower barrier at
-   `−1.0 × sigma_t`, measured as cumulative return from the close of *t*.
-3. Walk forward from *t*+1 to *t*+10, checking each day's high and low against
-   both barriers.
-4. **Label = 1** if the upper barrier is touched first. **Label = 0** if the
-   lower barrier is touched first, or if neither is touched within ten days.
-5. Record **`t1`**, the date the label resolved — the barrier-touch day, or
-   *t*+10 if it timed out.
+2. Set the barriers as a log move off the close of *t*:
+   `upper = close_t × exp(+2.5 × sigma_t)` and
+   `lower = close_t × exp(−2.5 × sigma_t)`. Log space, so the two are exact
+   mirrors — see the 2026-11-01 entries in the log for why 2.5 and why logs.
+3. Walk forward from *t*+1 to *t*+10 trading bars, checking each day's high and
+   low against both barriers.
+4. **Label = 1** if the upper barrier is touched first, **or if both are
+   touched on the same bar** — daily bars cannot order them, and the upper
+   barrier is the side we would have acted on. **Label = 0** if the lower
+   barrier is touched first, or if neither is touched within ten bars.
+5. Record **`t1`**, the bar the label resolved on — the barrier-touch bar, or
+   *t*+10 bars if it timed out. Always a real trading date, never a calendar
+   offset. Rows whose window runs off the end of the data are dropped rather
+   than recorded as timeouts.
 
 That `t1` column is not optional bookkeeping. Purging is defined in terms of
 it, so get it right before anything else is built on top.
@@ -62,6 +68,10 @@ it, so get it right before anything else is built on top.
 Barriers scale with volatility so a label means the same thing in a calm month
 as in a crisis. A fixed ±2% would be unreachable in one regime and noise in
 another, and the model would waste capacity learning around that.
+
+The width also has to match the horizon. At ±1 sigma the median label resolved
+in a single bar, which left nothing for purging to purge; ±2.5 sigma gives a
+mean window of about 6 bars and a timeout rate around 27%.
 
 ## Features
 
@@ -76,7 +86,8 @@ bar before the model sees them.
 | Distance from MA | `(close − MA) / MA` for 20, 50, 200-day averages |
 | Volume z-score | Volume against its own 20-day mean and std |
 
-Every feature added is a new configuration. Increment the trial counter.
+Feature sets enter the trial counter when they are scored against each other,
+not when a column is written. See the counter's note in `decision-log.md`.
 
 ## Models
 
@@ -113,6 +124,11 @@ span it — call that concurrency. For each label, uniqueness is the mean of
 the row count, and that is the effective sample size we report beside the raw
 one.
 
+Measured, pre-holdout: average uniqueness ≈ **0.15**, so ~4,300 rows per ticker
+carry the information of roughly **660** independent observations. Mean
+concurrency ≈ 7. Every standard error we report is read against that number,
+not the row count.
+
 **Walk-forward.** Expanding window. Train on everything up to a point, test on
 the next block, slide forward.
 
@@ -126,7 +142,7 @@ first.
 
 ## Metrics
 
-Labels are imbalanced, so accuracy would reward a model that never acts.
+Labels run about 40/60, so accuracy flatters a model that never acts.
 
 - **Precision** — primary. Acting wrongly costs money; skipping costs little.
 - **F1** and **AUC** — reported alongside, always next to the majority-class
