@@ -13,7 +13,6 @@ label windows is, and it leaks across a fold boundary whether or not the rows
 were shuffled.
 """
 
-import numpy as np
 import pandas as pd
 
 
@@ -50,11 +49,16 @@ def block_span(test_t1):
     overlapping a test label, and would survive the purge while knowing part of
     the answer. Taking the maximum t1 closes it.
 
-    `test_t1` is the t1 Series restricted to the test rows.
+    `test_t1` is the t1 Series restricted to the test rows. It need not be
+    sorted: the span is taken from the minimum start and the maximum t1, not
+    from the first and last elements. PurgedKFold always hands over a sorted
+    contiguous block, but a shuffled control would not, and a span starting at
+    whichever row happened to come first would begin after some of its own test
+    rows and under-purge everything before it.
     """
     if len(test_t1) == 0:
         raise ValueError("test block is empty")
-    return pd.Timestamp(test_t1.index[0]), pd.Timestamp(test_t1.max())
+    return pd.Timestamp(test_t1.index.min()), pd.Timestamp(test_t1.max())
 
 
 def purge_mask(t1, test_start, test_end, bar_index=None, embargo=0):

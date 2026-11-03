@@ -180,3 +180,15 @@ def test_bar_at_test_end_is_purged_whatever_the_embargo():
 
     for embargo in (0, 1, 5):
         assert 7 not in kept(purge_mask(t1, bars[4], end, bars, embargo=embargo))
+
+
+def test_block_span_does_not_assume_a_sorted_block():
+    # PurgedKFold hands over sorted contiguous blocks, so this is latent rather
+    # than live. It stops being latent the moment anything passes a scattered
+    # block -- a shuffled control is exactly that -- and a span taken from
+    # whichever row came first would start after some of its own test rows.
+    t1, bars = toy()
+    scattered = t1.iloc[[7, 2, 5]]
+
+    assert block_span(scattered) == (bars[2], t1.iloc[7])
+    assert block_span(scattered) == block_span(scattered.sort_index())

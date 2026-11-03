@@ -413,6 +413,39 @@ pre-holdout sample, comfortably above the 20 that the rolling features need.
 The 200-day moving average cannot be covered by any embargo we could afford and
 belongs in limitations.
 
+### 2026-11-03 · Correcting the shuffled-control leakage figures
+
+Measured again (Vansh, reviewing step 3). The open question below quoted 99.9%
+of training rows leaking under a shuffled control, against 0.5% contiguous.
+Neither reproduces. On SPY, pre-holdout, 4,302 rows, horizon 10, 5 folds:
+
+| control | train rows overlapping their test fold | test rows touched |
+| --- | --- | --- |
+| contiguous | 0.33% | 1.30% |
+| shuffled | 88.5% | 99.98% |
+
+The 99.9% came from measuring scattered folds with the interval test, the
+`[min t, max t1]` form `block_span` uses. That form is right for a contiguous
+block and meaningless for a shuffled one: once folds are scattered the interval
+spans nearly the whole sample, so almost every training row counts as
+overlapping it whether or not it shares a window with any test label. Counted
+pairwise -- each training row against each test window, which is the actual
+definition -- it is 88.5%, and stable at 88 to 90% across four seeds.
+
+Why 88% rather than ~99%: a row's window averages about 6 bars, so it overlaps
+roughly a dozen neighbours rather than the full 21 a 10-bar window either side
+would give, and `0.8^12` leaves about 7% of rows untouched by any test fold.
+
+None of this changes the conclusion, and the open question stands as the most
+urgent thing outstanding. 0.33% against 88.5% is a 250-fold difference, and it
+still decides what the headline number means. Recorded because the log is what
+the write-up quotes, and a number that cannot be reproduced is worse there than
+in a pull request.
+
+Purging removes 0.33% of training rows from a contiguous control, matching the
+contiguous leak exactly -- as it must, since purging removes precisely the
+overlapping rows and nothing else.
+
 ---
 ## Open questions
 
@@ -422,15 +455,16 @@ Move these into the log as dated entries once decided.
   what the headline number is, so it wants settling before step 6 scores
   anything. `project_details.md` calls the control "standard 5-fold K-fold",
   and sklearn's `KFold` does not shuffle by default. Measured at our shape —
-  4,302 rows, horizon 10, 5 folds — a contiguous control leaves 0.5% of
-  training rows overlapping their test fold and touches 1.9% of test rows;
-  shuffled, the same counts are 99.9% and 100%. Purging strips only 0.3% of
+  4,302 rows, horizon 10, 5 folds — a contiguous control leaves 0.33% of
+  training rows overlapping their test fold and touches 1.30% of test rows;
+  shuffled, the same counts are 88.5% and 99.98% (figures corrected 2026-11-03,
+  see the entry above). Purging strips only 0.33% of
   training rows out of a contiguous control, so read that way the
   K-fold-to-purged gap comes out near zero and the result is an artifact of
   fold geometry rather than a finding — the same shape of problem as the 1.0
   barrier width. Note this cuts against our own explainer, which says the leak
-  "has nothing to do with shuffling": qualitatively true, since 80 rows do leak
-  with contiguous folds, but 0.5% against 99.9% is not the same claim. Options:
+  "has nothing to do with shuffling": qualitatively true, since rows do leak
+  with contiguous folds, but 0.33% against 88.5% is not the same claim. Options:
   run both controls and report the pair, which costs one row in every table and
   makes the fold-geometry point explicit, or declare shuffled K-fold the
   control because it is what someone naive to time-ordered data actually does.
