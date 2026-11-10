@@ -19,13 +19,18 @@ The model is the vehicle. The spread between those three numbers is the result.
 
 | Scheme | What it does | Role |
 | --- | --- | --- |
-| Standard 5-fold K-fold | Ordinary cross-validation, no correction | **Control.** Wrong for this data, which is why we run it |
+| Standard 5-fold K-fold, contiguous | Ordinary cross-validation, no correction | **Control.** Wrong for this data, which is why we run it |
 | Purged 5-fold + embargo | Removes training rows that overlap the test fold | **Primary.** Our real number |
 | Walk-forward, expanding | Only ever trains on the past | **Corroboration.** Agreement means the result isn't an artifact of one split |
 | Holdout 2023–2025 | Opened once, at the very end | **Final.** No tuning against it, ever |
 
 Every one of these is labelled as such wherever it appears — in the code, on
 the site, in the write-up. The control must never read as an honest result.
+
+Contiguous, not shuffled — `sklearn.KFold`'s own default, and the harder test
+for our claim, since shuffling the same folds would leak 88% of training rows
+instead of 0.33% and hand us a flattering gap. One control, one headline; the
+shuffled figure appears once as context. See decision-log.md, 2026-11-10.
 
 ## The data
 
