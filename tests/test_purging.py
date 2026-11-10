@@ -192,3 +192,31 @@ def test_block_span_does_not_assume_a_sorted_block():
 
     assert block_span(scattered) == (bars[2], t1.iloc[7])
     assert block_span(scattered) == block_span(scattered.sort_index())
+
+
+def test_block_span_uses_max_t1_not_the_last_row_even_when_sorted():
+    # The hole a sabotage run found. Replacing `test_t1.max()` with
+    # `test_t1.iloc[-1]` broke only the scattered-block test above, because the
+    # toy label series there resolves every row exactly `horizon` bars later,
+    # so max and last coincide. Real t1 is not monotonic -- on SPY, 841 of
+    # 5,056 rows resolve earlier than the row before them, and in the final
+    # contiguous fold max(t1) is a week past the last row's t1. So a sorted
+    # block is enough to expose this, and nothing was asserting it.
+    bars = pd.bdate_range('2026-01-05', periods=40)
+
+    # Sorted and contiguous, but row 2 times out late while the last row
+    # resolves immediately: max(t1) is bars[20], the last t1 is only bars[5].
+    test_t1 = pd.Series(
+        [bars[1], bars[2], bars[20], bars[4], bars[5]],
+        index=bars[0:5],
+    )
+    assert test_t1.index.is_monotonic_increasing
+    assert block_span(test_t1) == (bars[0], bars[20])
+    assert block_span(test_t1)[1] != test_t1.iloc[-1]
+
+    # A training row living inside that tail must be purged. Against the last
+    # row's t1 it would survive while overlapping the row-2 test label.
+    train_t1 = pd.Series([bars[12]], index=[bars[10]])
+    start, end = block_span(test_t1)
+
+    assert not purge_mask(train_t1, start, end, bars).iloc[0]

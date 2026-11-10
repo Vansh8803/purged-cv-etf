@@ -684,6 +684,32 @@ purged 0.605, walk-forward 0.589), which is the contiguous-control result from
 purge, so purging changes almost nothing. On synthetic data where we know the
 truth, that is reassurance rather than a disappointment.
 
+### 2026-11-10 · A sabotage run found a hole in the step 3 tests
+
+Added (Vansh): `test_block_span_uses_max_t1_not_the_last_row_even_when_sorted`
+in `tests/test_purging.py`.
+
+Found by deliberately breaking each core line and checking what the suite
+caught. Replacing `test_t1.max()` with `test_t1.iloc[-1]` in `block_span` broke
+exactly one test -- the scattered-block one added on 2026-11-03 -- and only
+because that test passes an unsorted block. Nothing was asserting the sorted
+case.
+
+It should have been. `t1` is not monotonic: on SPY 841 of 5,056 rows resolve
+earlier than the row before them, because a row that touches a barrier
+immediately resolves sooner than a row that timed out ten bars ago. In the
+final contiguous fold `max(t1)` is a week later than the last row's `t1`. So
+the bug was live on real data in a sorted contiguous block, which is the only
+shape `PurgedKFold` ever produces, and the suite would not have caught it.
+
+The toy series in `test_cv.py` hid it: every label there resolves exactly
+`horizon` bars later, so `max` and `last` always coincide. A uniform fixture
+cannot exercise a bug about non-uniformity, which is worth remembering when the
+step 6 fixtures get written.
+
+Nothing was wrong in the shipped code -- `block_span` already used `max` -- but
+the property was unprotected, and that is the same thing one edit later.
+
 ---
 ## Open questions
 
