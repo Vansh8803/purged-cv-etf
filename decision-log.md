@@ -7,8 +7,8 @@ Ratio depends on.
 
 **Rules.** One entry per decision, and record the *reason*, not just the
 outcome. If a decision is reversed, add a new entry — never edit an old one.
-Attribute honestly: the course requires disclosing what AI assistance was used
-for, and this file is that record.
+Attribute honestly: who decided what, so the viva can be answered by whoever
+is asked.
 
 ---
 
@@ -446,28 +446,249 @@ Purging removes 0.33% of training rows from a contiguous control, matching the
 contiguous leak exactly -- as it must, since purging removes precisely the
 overlapping rows and nothing else.
 
+### 2026-11-10 · Step 4: walk-forward splitter, and why its embargo does nothing
+
+Added (Vansh): `WalkForward` in `src/cv.py`. The sample is cut into
+`n_splits + 1` contiguous blocks; fold *i* trains on blocks 0..*i* and tests on
+block *i+1*. One more block than folds, because the first is only ever trained
+on. It goes through the same `purge_mask` as everything else.
+
+Two things worth recording.
+
+**Purging is still needed even though we only train on the past.** The obvious
+reading of walk-forward is that training on history makes it leak-proof. It does
+not: the last training rows before a test block have label windows running up to
+10 bars forward, straight into the block. On the toy case the purge removes
+exactly those 10 rows, which is now asserted. Training on the past prevents
+training on *later rows*; it does nothing about a label that resolves later.
+
+**The embargo is a no-op here, and that is a property rather than an
+oversight.** The embargo drops training rows starting in
+`(test_end, test_end + embargo]`. An expanding window has no training row
+starting after its test block, so nothing is ever dropped. We kept the
+parameter so the two splitters are interchangeable in the sweep, and the test
+suite pins the no-op.
+
+The consequence lands in the write-up, not the code: **walk-forward is flat
+across the 0-to-20 embargo sweep by construction.** A flat line next to
+PurgedKFold's sloping one looks like a bug or a null finding, and is neither.
+If we wanted walk-forward to respond to the sweep it would need a gap withheld
+*before* each test block, which is a different mechanism from de Prado's
+embargo and would need its own justification. We are not adding one.
+
+### 2026-11-10 · Differential test for the labelling code
+
+Added (Vansh): `brute_force` in `tests/test_labels.py`, a plain-loop
+reimplementation of the triple-barrier label, plus 30 cases checking the
+vectorised `compute_labels` against it -- 25 random series and 5 deliberately
+non-square (rows x horizon) shapes.
+
+The vectorised version is fast but has two traps a reader cannot see: `argmax`
+returns 0 on an all-False row, which is indistinguishable from a touch on the
+first bar, and column *k* means bar *t+k+1*. The brute-force version has
+neither, and is correct by inspection. Diffing them turns "is the matrix logic
+right" into "do the two agree", which a test can actually answer.
+
+The random series use barriers at +/-0.5% against ~3% daily ranges, far tighter
+than our real 2.5 sigma. That is on purpose: at the real width a same-bar tie is
+rare enough that random testing would almost never exercise the tie rule, which
+is the branch most likely to be broken by a future edit.
+
+The non-square shapes guard a specific bug: with `rows == horizon` the
+comparison matrix is square, so a transposed broadcast would still run and
+would compare row *t*'s barrier against bar *k*'s price.
+
+### 2026-11-10 · AI-assistance disclosure removed from the log's rules
+
+Changed (Vansh): the rules block at the top of this file claimed "the course
+requires disclosing what AI assistance was used for, and this file is that
+record". It does not. The professor's position is that we need to be able to
+explain our own project, which is what the viva tests and what the crosswise
+write-up in the work split is designed to guarantee.
+
+The sentence was written into this file early and then followed in the
+2026-10-14 and 2026-10-21 entries, which is how an unverified claim about the
+course became a standing rule. Those two entries are left alone, per the rule
+about never editing an old entry. The rules block is not an entry, so the
+sentence is removed there and replaced with plain attribution -- who decided
+what -- which is what the viva actually needs.
+
+### 2026-11-10 · The control is contiguous K-fold. One control, one headline
+
+Decided (Vansh), closing the open question: the control is **standard 5-fold
+K-fold with contiguous folds**, and it is the only control the results tables
+carry. `NaiveKFold` in `src/cv.py`, defaulting to `shuffle=False`.
+
+Why contiguous and not shuffled:
+
+- `project_details.md` says "standard 5-fold K-fold". `sklearn.KFold` does not
+  shuffle by default, so that phrase already means contiguous. Picking the
+  shuffled variant would mean quietly redefining our own spec.
+- It is the harder test for our own claim. Shuffled K-fold leaks 88% of
+  training rows and would hand us a huge, flattering gap. A control chosen
+  because it makes our method look good is a strawman, and it is the first
+  thing worth attacking in a viva.
+
+What this costs us, stated plainly: **the headline gap will be small.** At our
+label geometry purging removes 0.33% of training rows from a contiguous
+control, so the K-fold-to-purged difference in score will be modest and may be
+inside noise. That is the honest answer and it is the one we report.
+
+It also sharpens what the project actually found, which is better than the gap
+we originally expected:
+
+> Fold geometry dominates leakage at this label length. Our labels resolve in
+> about 6 bars, so with contiguous folds only the rows at four fold boundaries
+> overlap a test fold at all -- 0.33%. Shuffle the same folds and the identical
+> scheme leaks 88%. Purging drives both to exactly 0.00%, and it is cheap
+> insurance whose value depends almost entirely on how the folds were cut.
+
+The shuffled figure is kept as **one sentence of context**, not a parallel
+results track. `NaiveKFold(shuffle=True, seed=...)` exists so that sentence is
+reproducible, and the seed comes from `config.yaml`. It does not get its own
+row in the model comparison, its own equity curve, or its own gap number.
+
+`leakage()` moved into `src/cv.py` with tests. These figures were quoted wrong
+once already (2026-11-03) and the write-up quotes them, so they are computed by
+tested code rather than by a script that no longer exists. Measured on SPY,
+4,302 pre-holdout rows, embargo 43 bars:
+
+| scheme | train rows leaked | test rows touched |
+| --- | --- | --- |
+| control, K-fold contiguous | 0.33% | 1.30% |
+| control, K-fold shuffled | 88.05% | 99.91% |
+| purged 5-fold + embargo | 0.00% | 0.00% |
+| walk-forward, expanding | 0.00% | 0.00% |
+
+### 2026-11-10 · Scope: one number per question, not a matrix of options
+
+Decided (Vansh): where a choice has been made and recorded, the write-up reports
+the chosen branch and mentions the alternative in a sentence. It does not report
+both branches as parallel results.
+
+The reason is that the opposite had started to happen by accident. Several
+decisions had arrived at "run both and report the pair" -- two controls, a
+21-point embargo sweep, cost and lag crossed on the site -- and each was cheap
+on its own. Together they multiply: five tickers times three schemes times two
+controls times a sweep is a table nobody reads and a result nobody can state in
+one sentence. A project with one clear claim beats one with six hedged ones, and
+the rubric rewards sound reasoning rather than coverage.
+
+What this does not touch: steps 1 and 3, the synthetic check, and the holdout
+discipline. Those four are the project, per the work split's never-descope list,
+and the decision log keeps every alternative we considered regardless of what
+the write-up carries. The log is the audit trail; the write-up is the argument.
+
+### 2026-11-10 · Step 5: preprocessing fitted in-fold, and what the model may see
+
+Added (Vansh): `src/features.py`. Two things, and the distinction is the step.
+
+The *features* are still computed globally by `data_process.py`, and that is
+not a leak. Every one is a deterministic rolling function of its own past,
+shifted one bar, so a row's values do not change with which fold it lands in.
+Nothing is estimated from the sample.
+
+The *preprocessing* is the part that had to move. A scaler learns column means
+and standard deviations; fitted on the whole matrix, every fold's test rows
+contribute to the numbers used to transform them. `make_pipeline` returns an
+sklearn Pipeline rather than a pre-transformed matrix, so the only way to use
+it is to call `fit` inside a fold. The canary test spikes a test-fold row to
+1e9 and asserts the fitted scale does not budge.
+
+`FEATURES` is an explicit list of ten, and `EXCLUDED` spells out what is
+withheld and why, because "everything except label and t1" would quietly admit
+all of it. Two exclusions are worth naming:
+
+- `log_return` is the return *at* t, unshifted. `ret_1d` is the same number
+  shifted, and is the one that belongs in the matrix.
+- `sigma` is sigma_t, unshifted, and it *sets the barrier width*. Handing it
+  over would break the one-bar rule and tell the model how far price must
+  travel for the label to fire. `realized_vol_20d` is sigma shifted, and is the
+  honest version. This turned out to matter more than expected -- see below.
+
+No feature selection. Ten features against an effective sample near 700 does
+not need it, and a selector is another thing to fit in-fold and another
+configuration to count.
+
+### 2026-11-10 · Step 10: the synthetic check passes, and found three things
+
+Added (Vansh): `src/synthetic.py` and `scripts/check_synthetic.py`. Synthetic
+series go through the *real* pipeline -- `engineer_features`,
+`compute_barriers`, `compute_labels`, the real splitters, the real in-fold
+preprocessing. One knob: `phi`, the AR(1) coefficient on daily returns. At
+`phi = 0` there is nothing to find; above it the predictability is real and
+sits in `ret_1d`, so the model has a known honest route to it.
+
+All three checks pass. Each was a surprise.
+
+**1. The no-signal floor is not 0.50. It is about 0.544.**
+
+The label's own construction leaks. `sigma_t` sets the barrier width; wide
+barriers are less likely to be touched inside ten bars; an untouched barrier is
+a timeout; and a timeout is label 0. So trailing volatility predicts the label
+on a pure random walk with no price predictability whatsoever. Measured on
+phi = 0, ten seeds:
+
+| features | AUC |
+| --- | --- |
+| return features only | 0.503 ± 0.028 |
+| all ten features | 0.544 ± 0.040 |
+
+`corr(realized_vol_20d, timeout) = +0.20`. Of the rows that resolved by
+touching a barrier, 50.9% went up -- direction is a coin flip, exactly as a
+random walk demands. The whole 0.044 comes from predicting *timeout*, not
+direction.
+
+This is a consequence of `timeout_is_negative: true` merging two different
+outcomes into label 0: "went down" and "went nowhere". The second is
+predictable from volatility and the first is not.
+
+**We are not redesigning the label.** The binary target was decided on
+2026-10-14 for reasons that still hold, and a three-class target would break
+comparability across the five models. What changes is how the number is read:
+**real-data AUC is reported against 0.544, not against 0.500**, and the write-up
+says why. The synthetic check existing is what makes that possible; without it
+we would have reported an AUC of 0.55 on real data as a modest edge when it is
+the floor.
+
+**2. One synthetic run proves nothing. The run-to-run spread is wider than the
+effect.**
+
+At phi = 0 on the full feature set, individual seeds landed between 0.489 and
+0.623. The first version of this check used a single seed, read 0.571, and I
+very nearly wrote up a structural floor of 0.57 from it. Everything is now
+averaged over ten seeds and reported with its spread. The same point applies to
+every real-data number we report: five folds on an effective sample near 700
+has error bars wide enough to swallow most effects we might claim.
+
+**3. The check's power is bounded, and that bounds what a null result means.**
+
+Returns-only AUC against planted signal strength, ten seeds each:
+
+| phi | 10-day carry | AUC |
+| --- | --- | --- |
+| 0.0 | 0.00 | 0.503 ± 0.028 |
+| 0.2 | 0.25 | 0.513 ± 0.028 |
+| 0.4 | 0.67 | 0.540 ± 0.020 |
+| 0.6 | 1.49 | 0.610 ± 0.014 |
+| 0.8 | 3.57 | 0.733 ± 0.014 |
+
+Detection starts around phi = 0.4. Below that the planted signal is inside the
+noise. So a flat result on real ETFs means "no AR(1)-style edge of phi >~ 0.4",
+not "no edge". That is a far more defensible sentence than "we found nothing",
+and it is the sentence the synthetic check buys us.
+
+The three schemes score within 0.001 of each other at phi = 0.6 (control 0.605,
+purged 0.605, walk-forward 0.589), which is the contiguous-control result from
+2026-11-10 showing up again: with contiguous folds there is almost nothing to
+purge, so purging changes almost nothing. On synthetic data where we know the
+truth, that is reassurance rather than a disappointment.
+
 ---
 ## Open questions
 
 Move these into the log as dated entries once decided.
 
-- **Is the control shuffled or contiguous?** The most urgent one: it decides
-  what the headline number is, so it wants settling before step 6 scores
-  anything. `project_details.md` calls the control "standard 5-fold K-fold",
-  and sklearn's `KFold` does not shuffle by default. Measured at our shape —
-  4,302 rows, horizon 10, 5 folds — a contiguous control leaves 0.33% of
-  training rows overlapping their test fold and touches 1.30% of test rows;
-  shuffled, the same counts are 88.5% and 99.98% (figures corrected 2026-11-03,
-  see the entry above). Purging strips only 0.33% of
-  training rows out of a contiguous control, so read that way the
-  K-fold-to-purged gap comes out near zero and the result is an artifact of
-  fold geometry rather than a finding — the same shape of problem as the 1.0
-  barrier width. Note this cuts against our own explainer, which says the leak
-  "has nothing to do with shuffling": qualitatively true, since rows do leak
-  with contiguous folds, but 0.33% against 88.5% is not the same claim. Options:
-  run both controls and report the pair, which costs one row in every table and
-  makes the fold-geometry point explicit, or declare shuffled K-fold the
-  control because it is what someone naive to time-ordered data actually does.
 - **JSON size for the website.** Precomputing all 2 × 21 × 21 × 2 = 1,764
   slider combinations as full equity curves is hundreds of megabytes. Plan:
   ship the ~42 position series (purging × embargo) and apply cost and
