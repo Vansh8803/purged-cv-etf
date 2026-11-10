@@ -25,6 +25,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from src.labels import compute_barriers, compute_labels
+from src.purging import purged_holdout_mask
 
 PROCESSED = ROOT / "data" / "processed"
 
@@ -53,8 +54,11 @@ def main() -> int:
         out = compute_labels(df, horizon=horizon)
         out.to_csv(PROCESSED / f"{ticker}_labelled.csv")
 
-        # Summary over pre-holdout rows only.
-        pre = out.loc[out.index < holdout_start]
+        # Summary over pre-holdout rows only, and purged rather than merely
+        # date-filtered: a December 2022 row whose label resolves in January
+        # 2023 was decided by holdout bars, so even counting it here would be
+        # a peek. On SPY that is 10 rows.
+        pre = out.loc[purged_holdout_mask(out["t1"], holdout_start, df.index)]
         pos = {d: i for i, d in enumerate(out.index)}
         hold = pre["t1"].map(pos) - pre.index.map(pos)
         timeout = (hold == horizon).mean()
