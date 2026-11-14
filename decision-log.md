@@ -782,6 +782,125 @@ hyperparameter grid was run, so nothing is hidden there.
 
 **Configurations evaluated so far: 5**
 
+### 2026-11-14 · Review of step 6: three scoring fixes, and a better null
+
+Reviewed (Vansh, on Aksh's step 6). Every number in the step 6 entry
+reproduces, 121 tests passed, and the purging machinery came through clean. The
+central conclusion -- the gap is zero because the control is contiguous -- is
+correct and was predicted in writing beforehand. Four things about how the
+numbers were *presented* were wrong, and all of them fed straight into the
+write-up.
+
+**1. Precision was averaged across folds, and the averaging inflated it.**
+
+Our models act on as little as 11% of bars, and the per-fold action count
+swings by an order of magnitude inside a single ticker -- 157, 22, 170, 225, 50
+for logistic on SPY. An unweighted mean of per-fold ratios gives the 22-action
+fold the same say as the 225-action one, and a small denominator is a noisy one
+that reliably reads high.
+
+| model | pooled | unweighted fold mean | inflation |
+| --- | --- | --- | --- |
+| logistic | 0.4532 | 0.4930 | +0.040 |
+| gbt | 0.4435 | 0.4546 | +0.011 |
+| meta_crossover_logistic | 0.4891 | 0.5160 | **+0.027** |
+
+Worst for the model whose entire claim is precision. Meta-labelling's margin
+over always-act drops from +0.111 to +0.084 -- still the best of the five, and
+the conclusion survives, but a quarter smaller than reported. `summarise` now
+sums `n_true_pos` and `n_acts` and divides once.
+
+**2. The printed precision benchmark was the majority rate, which is the wrong
+number.**
+
+The table showed `majority_rate` = 0.596. Precision is read against the
+**positive rate, 0.404** -- the number always-act scores by construction. At
+40% positives those two differ by 0.19, and against 0.596 every model looks
+like a failure. The step 6 entry had it right in prose and the code had it
+wrong, which is the sort of disagreement that becomes an error in the write-up.
+
+**3. Coverage was not reported at all.**
+
+Precision alone rewards abstention: a model acting once and getting it right
+scores 1.0. The pair has to travel together.
+
+| model | coverage | pooled precision | vs benchmark |
+| --- | --- | --- | --- |
+| buy_and_hold | 100.0% | 0.405 | +0.001 |
+| ma_crossover | 63.0% | 0.420 | +0.016 |
+| logistic | **11.0%** | 0.453 | +0.049 |
+| gbt | 26.2% | 0.444 | +0.040 |
+| meta_crossover_logistic | **13.7%** | 0.489 | +0.085 |
+
+**4. The gap's standard error was the wrong statistic, and the right one is
+ten times tighter.**
+
+`NaiveKFold(shuffle=False)` and `PurgedKFold` split the same rows the same way,
+so their test folds are *identical* -- verified on all 125 of them -- and only
+the training sets differ. The gap is therefore a paired comparison, and its
+noise is the spread of per-fold differences:
+
+| model | gap | paired s.e. | t | s.e. previously quoted |
+| --- | --- | --- | --- | --- |
+| logistic | +0.00027 | 0.00087 | **0.31** | 0.0168 |
+| gbt | -0.00038 | 0.00202 | -0.19 | 0.0160 |
+| meta | +0.00009 | 0.00039 | 0.24 | 0.0148 |
+
+The conclusion is unchanged and better supported. "Fifty times smaller than the
+noise" divided the gap by the noise on a different comparison; the honest line
+is **gap +0.0003, paired standard error 0.0009, t = 0.31**. `paired_gap` in
+`src/evaluate.py`, with a test showing the paired error collapsing to zero on
+folds that move together while the unpaired one stays wide.
+
+### 2026-11-14 · A null measured on real bars: the floor is 0.529, not 0.544
+
+Added (Vansh): `sign_flipped_ohlc` in `src/synthetic.py` and
+`scripts/check_floor_real.py`.
+
+`NO_SIGNAL_FLOOR = 0.544` came from a constant-volatility Gaussian random walk.
+Real ETFs cluster their volatility and have fat tails, and the floor is
+*produced* by a volatility channel, so whether that number transfers is a fair
+question. It was worth checking before the write-up rested on it.
+
+The test: multiply each daily return by a random +/-1. That leaves every
+`|r_t|` untouched, so the volatility path survives -- rolling sigma correlates
+**0.998** with the real one on SPY -- while all directional predictability is
+destroyed. Intraday reach magnitudes carry over too, so the barrier-touch rate
+and hence the timeout rate are preserved. An ordinary randomisation test.
+
+| ticker | floor | sd |
+| --- | --- | --- |
+| SPY | 0.540 | 0.015 |
+| QQQ | 0.525 | 0.016 |
+| IWM | 0.520 | 0.021 |
+| TLT | 0.523 | 0.034 |
+| GLD | 0.535 | 0.013 |
+| **pooled** | **0.529** | 0.021 (s.e. 0.0039, n=30) |
+
+**The synthetic floor is conservative, which is the safe direction to be
+wrong.** The real floor is 0.015 lower, so 0.544 *understates* logistic's lift:
++0.047 against the real null rather than +0.032. Nothing reported so far was
+flattered by the error.
+
+Three reasons to switch anyway: it is measured on the real feature
+distribution at the real sample size through the real folds; it is per ticker,
+and the 0.520-to-0.540 spread is hidden by a single constant; and its standard
+error is 0.0039 against the synthetic's 0.040 seed spread, so it stops being
+the dominant uncertainty in the lift. Combined with the paired standard error,
+logistic's lift goes from "1.9 s.e., suggestive" to roughly 2.7.
+
+**Not wired in.** Swapping the floor moves a headline number, so it needs both
+of us. The script prints the comparison; `NO_SIGNAL_FLOOR` is untouched.
+
+One thing that fell out and belongs in the write-up. Real lag-1 return
+autocorrelation, pre-holdout: SPY -0.107, QQQ -0.089, IWM -0.077, TLT -0.024,
+GLD -0.010. Step 10's power curve puts detection at about phi = +0.4. The real
+structure is an order of magnitude smaller than the smallest signal the
+pipeline can resolve, and the wrong sign for momentum besides. So the null
+result is exactly what the instrument predicts rather than a surprise -- which
+is a far better sentence than "we found nothing", and it is the one the
+synthetic check was built to earn.
+
 ---
 ## Open questions
 
@@ -791,6 +910,10 @@ Move these into the log as dated entries once decided.
   slider combinations as full equity curves is hundreds of megabytes. Plan:
   ship the ~42 position series (purging × embargo) and apply cost and
   execution lag in the browser. Confirm before building.
+- **Adopt the sign-flip floor of 0.529 in place of the synthetic 0.544?**
+  Needs Aksh. It is better calibrated and per ticker, and it raises
+  logistic's lift from +0.032 to +0.047. `scripts/check_floor_real.py`
+  prints it; wiring it in is a one-line change to `NO_SIGNAL_FLOOR`.
 - **Is the DSR a live number or a fixed one?** It depends on the total trial
   count, which is a property of the whole project, not of a slider position.
   Probably display it fixed, with the per-configuration Sharpe live.

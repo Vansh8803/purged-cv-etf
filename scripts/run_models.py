@@ -25,7 +25,7 @@ ROOT = Path(__file__).resolve().parents[1]
 sys.path.insert(0, str(ROOT))
 
 from src.cv import NaiveKFold, PurgedKFold, WalkForward, leakage
-from src.evaluate import cross_val_scores, summarise
+from src.evaluate import cross_val_scores, paired_gap, summarise
 from src.features import design_matrix, load_labelled, pre_holdout
 from src.models import model_zoo
 from src.purging import embargo_bars
@@ -34,7 +34,7 @@ from src.synthetic import NO_SIGNAL_FLOOR
 OUT = ROOT / "outputs"
 
 
-def schemes(t1, bars, folds, embargo, seed):
+def schemes(t1, bars, folds, embargo):
     """The three ways the same model gets scored.
 
     Labelled exactly as in project_details.md. `control` is run deliberately
@@ -66,7 +66,7 @@ def main() -> int:
         X, y, t1 = design_matrix(pre)
         embargo = embargo_bars(len(t1), cfg["split"]["embargo_frac"])
 
-        for scheme, cv in schemes(t1, bars, folds, embargo, seed).items():
+        for scheme, cv in schemes(t1, bars, folds, embargo).items():
             train_leak, test_leak = leakage(cv, t1)
 
             for name, model in model_zoo(seed).items():
@@ -82,8 +82,9 @@ def main() -> int:
         print(f"  {ticker}: {len(t1)} rows, embargo {embargo} bars")
 
     out = pd.DataFrame(rows)
+    folds = pd.concat(fold_rows)
     out.to_csv(OUT / "step06_scores.csv", index=False)
-    pd.concat(fold_rows).to_csv(OUT / "step06_folds.csv", index=False)
+    folds.to_csv(OUT / "step06_folds.csv", index=False)
 
     order = ["buy_and_hold", "ma_crossover", "logistic", "gbt",
              "meta_crossover_logistic"]
@@ -98,18 +99,43 @@ def main() -> int:
     shown["lift_vs_floor"] = auc["purged_kfold"] - NO_SIGNAL_FLOOR
     print(shown.round(4).to_string())
     print(f"  lift_vs_floor = purged AUC - {NO_SIGNAL_FLOOR}, the measured "
-          f"no-signal floor. Compare it against purged_auc_se below.")
+          f"no-signal floor. Its own uncertainty is wider than this lift; "
+          f"see the 2026-11-14 review entry.")
 
-    print("\nPrecision, with the majority-class rate it has to be read against")
+    # Pooled over folds, and shown with coverage and the positive rate.
+    # Precision alone rewards abstention -- a model acting once and getting it
+    # right scores 1.0 -- so how often it acted travels with it. And the
+    # benchmark is the positive rate, which is what always-act scores by
+    # construction, NOT the majority rate: at 40% positives those are 0.40 and
+    # 0.60, and reading precision against 0.60 makes every model look broken.
+    print("\nPrecision (pooled over folds), with coverage and the benchmark")
     prec = out.pivot_table(index="model", columns="scheme",
                            values="precision").loc[order]
-    prec["majority_rate"] = out.groupby("model")["majority_rate"].mean().loc[order]
+    purged = out[out.scheme == "purged_kfold"]
+    prec["coverage"] = purged.groupby("model")["coverage"].mean().loc[order]
+    prec["positive_rate"] = out.groupby("model")["positive_rate"].mean().loc[order]
+    prec["vs_benchmark"] = prec["purged_kfold"] - prec["positive_rate"]
     print(prec.round(4).to_string())
+    print("  coverage = share of test bars acted on, purged scheme.")
+    print("  positive_rate = always-act precision, the number to beat.")
 
-    print("\nThe headline: control minus purged, in AUC")
-    gap = (auc["control_kfold"] - auc["purged_kfold"]).rename("gap")
-    se = out[out.scheme == "purged_kfold"].groupby("model")["auc_se"].mean().loc[order]
-    print(pd.concat([gap, se.rename("purged_auc_se")], axis=1).round(4).to_string())
+    print("\nPrecision: pooled vs the unweighted fold mean it replaced")
+    comp = pd.DataFrame({
+        "pooled": purged.groupby("model")["precision"].mean(),
+        "fold_mean": purged.groupby("model")["precision_fold_mean"].mean(),
+    }).loc[order]
+    comp["inflation"] = comp["fold_mean"] - comp["pooled"]
+    print(comp.round(4).to_string())
+
+    # PAIRED. The control and the purged scheme split the same rows the same
+    # way, so their test folds are identical and only the training sets
+    # differ. The noise on the gap is the spread of the per-fold differences,
+    # about ten times tighter than either scheme own standard error.
+    print("\nThe headline: control minus purged in AUC, paired over folds")
+    gap = paired_gap(folds, "control_kfold", "purged_kfold").loc[order]
+    print(gap.round(5).to_string())
+    print("  n = tickers x folds. t = gap / paired_se; NaN where a rule scores")
+    print("  identically under both schemes, so the gap is exactly zero.")
 
     print(f"\nLeakage by scheme (train rows, test rows):")
     for scheme, grp in out.groupby("scheme"):
