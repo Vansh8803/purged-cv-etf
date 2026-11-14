@@ -70,3 +70,16 @@ def synthetic_dataset(n_bars=3000, phi=0.0, barrier_mult=2.5, horizon=10,
     df = compute_barriers(df, barrier_mult=barrier_mult, vol_lookback=vol_lookback)
     df = df.dropna(subset=["sigma"])
     return compute_labels(df, horizon=horizon), bar_index
+
+
+#: AUC the full feature set reaches on data containing no signal at all.
+#:
+#: Not 0.50. `sigma_t` sets the barrier width, wide barriers are less likely to
+#: be touched within ten bars, an untouched barrier is a timeout, and a timeout
+#: is label 0 -- so trailing volatility predicts the label on a pure random
+#: walk. Measured at phi = 0 over ten seeds: 0.544 +/- 0.040, against 0.503 for
+#: the return features alone. See decision-log.md, 2026-11-10.
+#:
+#: Real-data AUC is reported against this number rather than against 0.50.
+#: `scripts/check_synthetic.py` recomputes it; if that run moves, update this.
+NO_SIGNAL_FLOOR = 0.544

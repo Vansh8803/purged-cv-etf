@@ -46,7 +46,7 @@ label statistics like uniqueness or timeout rate, produces nothing to select
 on and is not a trial. The counter starts moving at step 6, when models are
 first scored.
 
-**Configurations evaluated so far: 0**
+**Configurations evaluated so far: 5** — see the 2026-11-14 entry.
 
 ---
 
@@ -709,6 +709,78 @@ step 6 fixtures get written.
 
 Nothing was wrong in the shipped code -- `block_span` already used `max` -- but
 the property was unprotected, and that is the same thing one edit later.
+
+### 2026-11-14 · Step 6: the gap is zero, and the simple model wins
+
+Added (Aksh): `src/models.py`, `scripts/run_models.py`, `tests/test_models.py`.
+Five models, three schemes, five tickers, pre-holdout, preprocessing fitted
+inside every fold. Numbers below are averaged over the five tickers.
+
+AUC, read against the **0.544 no-signal floor** from step 10 rather than 0.50:
+
+| model | control | purged | walk-forward | lift vs floor |
+| --- | --- | --- | --- | --- |
+| buy_and_hold | 0.5000 | 0.5000 | 0.5000 | -0.044 |
+| ma_crossover | 0.5131 | 0.5131 | 0.5108 | -0.031 |
+| logistic | 0.5758 | 0.5755 | 0.5710 | **+0.032** |
+| gbt | 0.5554 | 0.5558 | 0.5439 | +0.012 |
+| meta_crossover_logistic | 0.5476 | 0.5475 | 0.5398 | +0.004 |
+
+**The headline gap is zero.** Control minus purged is +0.0003 for logistic,
+-0.0004 for the trees, against a per-fold standard error of about 0.017. The
+gap is roughly fifty times smaller than the noise on the number it is measured
+from. This is not a disappointment and it is not a null we have to apologise
+for: it is the direct consequence of the contiguous-control decision, which
+predicted it in writing on 2026-11-10 before any model was scored. Only 0.33%
+of training rows leak in a contiguous control, so there was never room for the
+score to move. **Fold geometry, not purging, is what decides how much a
+careless backtest flatters itself at this label length.**
+
+**Logistic beats gradient boosting**, 0.576 against 0.556, and beats it on
+precision too, 0.493 against 0.455. The 2026-10-14 argument against more
+capacity was that the effective sample is ~700, not that trees were wrong, and
+this is that argument landing. The complex model did not earn its place, which
+is itself the method-selection result rather than a failure to find one.
+
+**Both rules sit below the floor.** Buy-and-hold scores 0.500 by construction
+and the moving-average crossover 0.513, against a floor of 0.544. A model that
+knew nothing except trailing volatility would beat our baseline. Worth saying
+plainly in the write-up: the baseline is not a strawman we beat, it is a rule
+that does essentially nothing on this target.
+
+**Precision is where meta-labelling shows up.** 0.516 against always-act's
+0.405, the best of the five, while its AUC is mid-table. That is the shape
+meta-labelling is supposed to have -- it does not rank better, it declines to
+act where the rule would have been wrong -- and precision is our primary metric
+because acting wrongly costs money.
+
+**Walk-forward agrees**, 0.571 against the purged 0.576 for logistic. Slightly
+lower everywhere, which is expected since it trains on less data, and no
+disagreement that would suggest the purged result is an artifact of one split.
+
+Caveats that belong in limitations. The logistic lift of +0.032 is about 1.9
+standard errors, which is suggestive and not significant. Reading it against
+0.50 instead of 0.544 would have turned a marginal lift into an apparent 0.076
+edge, which is exactly the error step 10 was built to catch.
+
+**No hyperparameter search.** Settings are fixed, conservative, and chosen for
+the sample size rather than tuned on it. A grid would multiply the trial count
+the Deflated Sharpe Ratio depends on, for a model class the evidence already
+says is too big for the data.
+
+### 2026-11-14 · Trial counter moves to 5
+
+Decided (Aksh, pending Vansh's confirmation): the counter is **5** -- the five
+models in `model_zoo`, scored per ticker.
+
+Per the counter's own rule, a trial is a configuration we got a performance
+number out of and could therefore have selected on. The three schemes are
+measurements of the same model rather than alternatives we would choose
+between, so they do not multiply it. Each ticker gets its own model and its own
+Deflated Sharpe Ratio, so the five tickers do not multiply it either. No
+hyperparameter grid was run, so nothing is hidden there.
+
+**Configurations evaluated so far: 5**
 
 ---
 ## Open questions
