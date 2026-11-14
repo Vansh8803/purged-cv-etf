@@ -88,3 +88,50 @@ def test_direction_is_a_coin_flip_among_rows_that_touched_a_barrier():
     touched = (df["t1"].map(pos) - df.index.map(pos)) != 10
 
     assert abs(df.loc[touched, "label"].mean() - 0.50) < 0.04
+
+
+def test_sign_flip_preserves_the_real_volatility_path():
+    # Checked on real bars, not synthetic ones. The claim is about real data,
+    # and it is *stronger* there: real volatility clusters, so the rolling
+    # sigma has large persistent swings that dwarf the small perturbation a
+    # sign flip introduces through the window mean. On a constant-volatility
+    # synthetic series the sigma path is mostly estimation noise, so the same
+    # perturbation matters relatively more and the correlation is only ~0.96.
+    from src.synthetic import sign_flipped_ohlc
+
+    raw = pd.read_csv('data/raw/SPY_2005-01-01_2025-12-31_dl2026-10-16.csv',
+                      index_col='Date', parse_dates=True)
+    flipped = sign_flipped_ohlc(raw, seed=1)
+
+    r = np.log(raw["Adj Close"] / raw["Adj Close"].shift(1)).dropna()
+    rf = np.log(flipped["Adj Close"] / flipped["Adj Close"].shift(1)).dropna()
+
+    assert np.allclose(np.sort(np.abs(r)), np.sort(np.abs(rf)))
+    assert r.rolling(20).std().corr(rf.rolling(20).std()) > 0.99
+
+
+def test_sign_flip_destroys_directional_predictability():
+    # Planted AR(1) of 0.6 before, nothing after. This is the half of the
+    # construction that makes it a null.
+    from src.synthetic import sign_flipped_ohlc
+
+    raw = synthetic_ohlc(n_bars=3000, phi=0.6, seed=1)
+    flipped = sign_flipped_ohlc(raw, seed=1)
+
+    r = np.log(raw["Adj Close"] / raw["Adj Close"].shift(1)).dropna().to_numpy()
+    rf = np.log(flipped["Adj Close"] / flipped["Adj Close"].shift(1)).dropna().to_numpy()
+
+    assert np.corrcoef(r[1:], r[:-1])[0, 1] > 0.45
+    assert abs(np.corrcoef(rf[1:], rf[:-1])[0, 1]) < 0.10
+
+
+def test_sign_flip_keeps_the_adjustment_factor_at_one():
+    from src.synthetic import sign_flipped_ohlc
+
+    raw = synthetic_ohlc(n_bars=400, phi=0.0, seed=2)
+    flipped = sign_flipped_ohlc(raw, seed=2)
+
+    assert (flipped["Adj Close"] == flipped["Close"]).all()
+    # High above close above low, every bar, or the barriers are nonsense.
+    assert (flipped["High"] >= flipped["Close"]).all()
+    assert (flipped["Low"] <= flipped["Close"]).all()
