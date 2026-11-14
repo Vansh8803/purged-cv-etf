@@ -157,3 +157,38 @@ def summary(returns, traded=None, position=None, n_trials=None, sr_std=None,
         out["dsr"] = deflated_sharpe(returns, n_trials, sr_std)
         out["sr_star_annual"] = expected_max_sharpe(n_trials, sr_std) * np.sqrt(periods)
     return out
+
+
+def exposure_matched_sharpe(position, returns, n_draws=200, seed=0, periods=252):
+    """Sharpe from holding the same *number* of bars, picked at random.
+
+    The control that makes the exposure caveat a number instead of an apology.
+    A long-or-flat strategy invested 22% of the time forfeits most of the
+    equity premium whatever it selects, so comparing its Sharpe with
+    buy-and-hold's confounds two different things: how well it chose, and how
+    often it was in. This holds the second fixed.
+
+    The position series is shuffled, which keeps the count of held bars exactly
+    and destroys which ones they were. Averaged over `n_draws` shuffles, the
+    result is what a strategy with this exposure and no selection skill would
+    score. The difference between the real Sharpe and this is the selection
+    ability, with the exposure effect divided out.
+
+    Buy-and-hold is the sanity check: at ~100% exposure there is nothing to
+    shuffle, so its real and matched Sharpes agree to three decimals. They do.
+
+    Returns (mean, sd) across draws, annualised like `sharpe`.
+    """
+    held = np.asarray(position, dtype=bool)
+    r = np.asarray(pd.Series(returns).fillna(0.0), dtype=float)
+    if len(held) != len(r):
+        raise ValueError("position and returns must be the same length")
+
+    rng = np.random.default_rng(seed)
+    draws = np.empty(n_draws)
+    for i in range(n_draws):
+        perm = held.copy()
+        rng.shuffle(perm)
+        draws[i] = sharpe(np.where(perm, r, 0.0), periods)
+
+    return float(draws.mean()), float(draws.std(ddof=1))

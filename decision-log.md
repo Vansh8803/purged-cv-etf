@@ -976,6 +976,80 @@ several predictions are live, and stacking them would make leverage a function
 of signal density and turnover meaningless. The cost is that a strong run of
 signals looks like a single one.
 
+### 2026-11-14 · Review of steps 7-9: exposure, not turnover, is what sinks logistic
+
+Reviewed (Vansh, on Aksh's steps 7-9). Every number reproduces, 158 tests
+passed, and the hard parts are right. Specifically checked and correct: the DSR
+matches Bailey and Lopez de Prado (2014) equation 5 including the
+Euler-Mascheroni weighting; `sharpe_se` is Lo (2002) for the IID case with the
+per-period ratio inside it and the annualisation outside, and the 0.242 it
+reports is analytically exactly `sqrt(252/4300)`; `positions` opens on the bar
+after the signal and the difference-array bounds are safe at both ends of the
+calendar.
+
+**A check worth recording, because somebody will ask.** The label is an
+*intraday* barrier touch while the backtest exits at the *close* of `t1`, so a
+correct prediction need not be a winning trade. Measured: a label=1 row is a
+winning close-to-close trade **99.4%** of the time, mean +2.67% against -1.40%
+for label=0, a spread of **+4.06% per trade**. The label and the money are
+aligned, and a perfect classifier would have made a fortune. That rules out the
+obvious alternative explanation for the headline, so the headline is about the
+models rather than about the label.
+
+**The one correction: "turnover is what does the damage" is right for the trees
+and wrong for logistic.**
+
+At 0 bps there are no costs at all, and logistic is already at 0.057 against
+buy-and-hold's 0.480. Turnover cannot explain a gap that exists before any
+turnover is charged. The step 7-9 entry does flag exposure as a caveat, but
+then attributes the damage to turnover in a heading, and the caveat is the
+mechanism.
+
+Added `exposure_matched_sharpe` in `src/metrics.py` to make it a number rather
+than an apology: shuffle the position series, which holds the *count* of
+invested bars exactly and destroys *which* bars they were, and average over 200
+draws. That is what a strategy with this exposure and no selection skill
+scores. Buy-and-hold validates the control -- at ~100% exposure there is
+nothing to shuffle and its edge comes out -0.0008.
+
+At 0 bps, averaged over the five tickers:
+
+| model | exposure | matched benchmark | actual | selection edge | t |
+| --- | --- | --- | --- | --- | --- |
+| buy_and_hold | 1.00 | 0.481 | 0.480 | -0.001 | -0.54 |
+| ma_crossover | 0.68 | 0.391 | 0.363 | -0.028 | -0.43 |
+| logistic | 0.22 | 0.221 | 0.057 | **-0.164** | **-2.36** |
+| gbt | 0.51 | 0.340 | 0.410 | +0.071 | 1.37 |
+| meta_crossover_logistic | 0.23 | 0.228 | 0.328 | +0.099 | 0.84 |
+
+The decomposition for logistic reads **0.480 -> 0.221 -> 0.057 -> -0.058**:
+most of the fall is exposure, because being out of the market 78% of the time
+forfeits the equity premium whatever you pick; then negative selection; then
+cost. Three mechanisms, and the write-up should name all three rather than
+blaming turnover for the lot.
+
+**No model shows significant positive selection.** The trees at +0.071 and
+meta-labelling at +0.099 are the right sign but t = 1.37 and 0.84, which is
+nothing. The only result that clears two standard errors is **logistic's
+negative edge**: it picks worse-than-random days, and it does so while having
+the highest AUC of the five. That is a sharper version of Aksh's finding rather
+than a contradiction of it -- ranking ability and profitability are different
+questions, and here they point in opposite directions.
+
+It also squares with step 6. Meta-labelling had the best precision there, 0.489
+against the 0.404 base rate, and it has the best selection edge here. Two
+different instruments agreeing on the same weak signal is worth a sentence in
+the write-up, as long as that sentence says the signal is not significant.
+
+**One limitation to add about the DSR.** `sr_std` is the spread of Sharpes
+across five *structurally different* strategies, two of which -- buy-and-hold
+and the crossover -- are fixed references rather than search outcomes. The
+expected-maximum formula assumes N draws from a distribution of zero-skill
+configurations. Using the observed spread of heterogeneous strategies instead
+is a defensible approximation and a conservative one, since the spread is wider
+than a true zero-skill distribution would be, which raises the benchmark and
+lowers every DSR. Worth one sentence rather than a rework.
+
 ---
 ## Open questions
 

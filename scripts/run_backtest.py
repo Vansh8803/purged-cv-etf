@@ -31,7 +31,7 @@ from src.backtest import backtest, positions
 from src.cv import PurgedKFold
 from src.evaluate import oof_predictions
 from src.features import design_matrix, load_labelled, pre_holdout
-from src.metrics import summary
+from src.metrics import exposure_matched_sharpe, summary
 from src.models import model_zoo
 from src.purging import embargo_bars
 
@@ -78,6 +78,15 @@ def main() -> int:
                 net_returns[(ticker, name, cost)] = bt["net_return"]
                 if cost == costs[0]:
                     curves[(ticker, name)] = bt["equity"]
+                    # Exposure-matched control: same number of bars held,
+                    # chosen at random. Separates how well the model chose
+                    # from how often it was invested, which a raw Sharpe
+                    # against buy-and-hold confounds.
+                    m, msd = exposure_matched_sharpe(
+                        bt["position"], np.expm1(log_return), seed=seed)
+                    rows[-1]["sharpe_matched"] = m
+                    rows[-1]["sharpe_matched_sd"] = msd
+                    rows[-1]["selection_edge"] = rows[-1]["sharpe"] - m
 
         print(f"  {ticker}: {len(t1)} rows, embargo {embargo} bars")
 
@@ -106,6 +115,19 @@ def main() -> int:
 
     show = ["sharpe", "sharpe_se", "sharpe_t", "max_drawdown", "turnover",
             "exposure"]
+    print()
+    print("Exposure vs selection, at 0 bps. A long-or-flat strategy invested")
+    print("22% of the time forfeits most of the equity premium whatever it")
+    print("picks, so Sharpe against buy-and-hold confounds two things.")
+    dec = (out[out.cost_bps == costs[0]]
+           .groupby("model")[["exposure", "sharpe_matched", "sharpe",
+                              "selection_edge"]].mean().loc[ORDER])
+    dec = dec.rename(columns={"sharpe_matched": "matched_benchmark",
+                              "sharpe": "actual"})
+    print(dec.round(4).to_string())
+    print("  matched_benchmark = same bars held, chosen at random.")
+    print("  selection_edge = actual - matched. Buy-and-hold sits at ~0 by")
+    print("  construction, which is what validates the control.")
     for cost in costs:
         print(f"\nCost {cost} bps — averaged over the five tickers")
         tbl = out[out.cost_bps == cost].groupby("model")[show].mean().loc[ORDER]

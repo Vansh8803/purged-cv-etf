@@ -155,3 +155,46 @@ def test_summary_omits_the_dsr_when_the_search_is_not_described():
     r = pd.Series(np.random.default_rng(8).normal(0.0005, 0.01, 300))
 
     assert "dsr" not in summary(r)
+
+
+def test_exposure_matched_sharpe_agrees_with_itself_at_full_exposure():
+    # Nothing to shuffle when every bar is held, so the matched Sharpe must be
+    # the real one. This is the check that the benchmark is wired up right.
+    from src.metrics import exposure_matched_sharpe
+
+    rng = np.random.default_rng(0)
+    r = rng.normal(0.0004, 0.01, 2000)
+    pos = np.ones(2000)
+
+    mean, sd = exposure_matched_sharpe(pos, r, n_draws=20)
+    assert mean == pytest.approx(sharpe(r), abs=1e-9)
+    assert sd == pytest.approx(0.0, abs=1e-9)
+
+
+def test_exposure_matched_sharpe_isolates_selection_from_exposure():
+    # A strategy holding only the best 20% of bars must beat its own
+    # exposure-matched benchmark; one holding only the worst 20% must lose to
+    # it. Same exposure in both cases, so only selection differs.
+    from src.metrics import exposure_matched_sharpe
+
+    rng = np.random.default_rng(1)
+    r = rng.normal(0.0004, 0.01, 2000)
+    cut = np.quantile(r, 0.8)
+
+    good = (r >= cut).astype(float)
+    bad = (r <= np.quantile(r, 0.2)).astype(float)
+
+    good_matched, _ = exposure_matched_sharpe(good, r, n_draws=40)
+    bad_matched, _ = exposure_matched_sharpe(bad, r, n_draws=40)
+
+    assert sharpe(np.where(good > 0, r, 0.0)) > good_matched
+    assert sharpe(np.where(bad > 0, r, 0.0)) < bad_matched
+    # Same number of bars held, so the two benchmarks must be close.
+    assert good_matched == pytest.approx(bad_matched, abs=0.15)
+
+
+def test_exposure_matched_sharpe_checks_its_inputs():
+    from src.metrics import exposure_matched_sharpe
+
+    with pytest.raises(ValueError, match="same length"):
+        exposure_matched_sharpe(np.ones(10), np.zeros(5))
