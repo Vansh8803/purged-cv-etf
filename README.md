@@ -115,9 +115,31 @@ seeds. Exits non-zero if any of its three checks fail. It also reports the
 not against 0.500, because the label leaks through volatility. See
 decision-log.md, 2026-11-10.
 
-Steps 1 and 2 are done. Remaining build order is step-by-step in
-[`project_details.md`](project_details.md#build-order). Step 3 (`PurgedKFold`)
-is next and gets tested harder than feels necessary.
+Then the model comparison:
+
+```powershell
+python scripts/run_models.py      # five models x three schemes x five tickers
+```
+
+It writes `outputs/step06_scores.csv` and `outputs/step06_folds.csv`, and
+prints the AUC and precision tables the write-up is built on. Pre-holdout rows
+only, purged against the holdout rather than merely filtered by date. AUC is
+printed beside its lift over the 0.544 floor, because that is the number that
+means something.
+
+Then the strategy-level numbers:
+
+```powershell
+python scripts/run_backtest.py    # positions, costs, Sharpe, drawdown, DSR
+```
+
+It writes `outputs/step789_backtest.csv` and `outputs/step789_equity.csv`.
+Read every Sharpe against its own standard error, which is about 0.24 on this
+much data — wide enough that only buy-and-hold is distinguishable from zero.
+
+Steps 1 to 10 are done. Remaining build order is step-by-step in
+[`project_details.md`](project_details.md#build-order): the precomputed grid
+(11), the site (12), opening the holdout (13) and the write-up (14).
 
 Tests, once there are any:
 

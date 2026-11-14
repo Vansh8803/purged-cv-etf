@@ -70,3 +70,63 @@ def synthetic_dataset(n_bars=3000, phi=0.0, barrier_mult=2.5, horizon=10,
     df = compute_barriers(df, barrier_mult=barrier_mult, vol_lookback=vol_lookback)
     df = df.dropna(subset=["sigma"])
     return compute_labels(df, horizon=horizon), bar_index
+
+
+#: AUC the full feature set reaches on data containing no signal at all.
+#:
+#: Not 0.50. `sigma_t` sets the barrier width, wide barriers are less likely to
+#: be touched within ten bars, an untouched barrier is a timeout, and a timeout
+#: is label 0 -- so trailing volatility predicts the label on a pure random
+#: walk. Measured at phi = 0 over ten seeds: 0.544 +/- 0.040, against 0.503 for
+#: the return features alone. See decision-log.md, 2026-11-10.
+#:
+#: Real-data AUC is reported against this number rather than against 0.50.
+#: `scripts/check_synthetic.py` recomputes it; if that run moves, update this.
+NO_SIGNAL_FLOOR = 0.544
+
+
+def sign_flipped_ohlc(raw, seed=0):
+    """Real bars with the direction of every day's move randomised.
+
+    A better null than the Gaussian series above, for the one job the floor
+    does: saying what AUC a model reaches when there is no directional signal.
+
+    Each daily log return is multiplied by a random +/-1. That leaves `|r_t|`
+    untouched bar for bar, so the volatility path survives essentially intact --
+    clustering, regimes, fat tails, the 2008 and 2020 spikes -- while every
+    trace of directional predictability is destroyed. Measured on SPY the
+    rolling 20-day sigma correlates 0.997 with the real one; it is not exact,
+    because a window's variance depends on its mean as well as on the squares,
+    but the mean of daily returns is near zero and the residual is about 3%.
+
+    Intraday reach is carried over as magnitudes, `|log(high/close)|` and
+    `|log(low/close)|`, so how readily a barrier is touched is preserved too.
+    That matters more than it sounds: the barrier-touch rate is what drives the
+    timeout rate, and the timeout rate is the channel the floor is measuring.
+
+    `Adj Close` is set equal to `Close`, so the adjustment factor is exactly 1
+    and the high/low scaling path cannot confound the result.
+
+    Why this beats the synthetic floor: it is measured on the real feature
+    distribution, at the real sample size, through the real folds, and it can
+    be computed per ticker instead of as one constant. It is an ordinary
+    randomisation test, which is also an easier thing to defend than a
+    Gaussian stand-in.
+    """
+    af = raw["Adj Close"] / raw["Close"]
+    close = raw["Adj Close"]
+    up = np.abs(np.log((raw["High"] * af / close).to_numpy()))
+    down = np.abs(np.log((raw["Low"] * af / close).to_numpy()))
+
+    r = np.log(close / close.shift(1)).fillna(0.0).to_numpy()
+    flip = np.random.default_rng(seed).choice([-1.0, 1.0], len(r))
+    path = close.iloc[0] * np.exp(np.cumsum(flip * r))
+
+    return pd.DataFrame({
+        "Open": path,
+        "High": path * np.exp(up),
+        "Low": path * np.exp(-down),
+        "Close": path,
+        "Adj Close": path,
+        "Volume": raw["Volume"].to_numpy(),
+    }, index=raw.index)

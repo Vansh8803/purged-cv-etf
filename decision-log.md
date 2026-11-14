@@ -46,7 +46,7 @@ label statistics like uniqueness or timeout rate, produces nothing to select
 on and is not a trial. The counter starts moving at step 6, when models are
 first scored.
 
-**Configurations evaluated so far: 0**
+**Configurations evaluated so far: 5** — see the 2026-11-14 entry.
 
 ---
 
@@ -710,6 +710,346 @@ step 6 fixtures get written.
 Nothing was wrong in the shipped code -- `block_span` already used `max` -- but
 the property was unprotected, and that is the same thing one edit later.
 
+### 2026-11-14 · Step 6: the gap is zero, and the simple model wins
+
+Added (Aksh): `src/models.py`, `scripts/run_models.py`, `tests/test_models.py`.
+Five models, three schemes, five tickers, pre-holdout, preprocessing fitted
+inside every fold. Numbers below are averaged over the five tickers.
+
+AUC, read against the **0.544 no-signal floor** from step 10 rather than 0.50:
+
+| model | control | purged | walk-forward | lift vs floor |
+| --- | --- | --- | --- | --- |
+| buy_and_hold | 0.5000 | 0.5000 | 0.5000 | -0.044 |
+| ma_crossover | 0.5131 | 0.5131 | 0.5108 | -0.031 |
+| logistic | 0.5758 | 0.5755 | 0.5710 | **+0.032** |
+| gbt | 0.5554 | 0.5558 | 0.5439 | +0.012 |
+| meta_crossover_logistic | 0.5476 | 0.5475 | 0.5398 | +0.004 |
+
+**The headline gap is zero.** Control minus purged is +0.0003 for logistic,
+-0.0004 for the trees, against a per-fold standard error of about 0.017. The
+gap is roughly fifty times smaller than the noise on the number it is measured
+from. This is not a disappointment and it is not a null we have to apologise
+for: it is the direct consequence of the contiguous-control decision, which
+predicted it in writing on 2026-11-10 before any model was scored. Only 0.33%
+of training rows leak in a contiguous control, so there was never room for the
+score to move. **Fold geometry, not purging, is what decides how much a
+careless backtest flatters itself at this label length.**
+
+**Logistic beats gradient boosting**, 0.576 against 0.556, and beats it on
+precision too, 0.493 against 0.455. The 2026-10-14 argument against more
+capacity was that the effective sample is ~700, not that trees were wrong, and
+this is that argument landing. The complex model did not earn its place, which
+is itself the method-selection result rather than a failure to find one.
+
+**Both rules sit below the floor.** Buy-and-hold scores 0.500 by construction
+and the moving-average crossover 0.513, against a floor of 0.544. A model that
+knew nothing except trailing volatility would beat our baseline. Worth saying
+plainly in the write-up: the baseline is not a strawman we beat, it is a rule
+that does essentially nothing on this target.
+
+**Precision is where meta-labelling shows up.** 0.516 against always-act's
+0.405, the best of the five, while its AUC is mid-table. That is the shape
+meta-labelling is supposed to have -- it does not rank better, it declines to
+act where the rule would have been wrong -- and precision is our primary metric
+because acting wrongly costs money.
+
+**Walk-forward agrees**, 0.571 against the purged 0.576 for logistic. Slightly
+lower everywhere, which is expected since it trains on less data, and no
+disagreement that would suggest the purged result is an artifact of one split.
+
+Caveats that belong in limitations. The logistic lift of +0.032 is about 1.9
+standard errors, which is suggestive and not significant. Reading it against
+0.50 instead of 0.544 would have turned a marginal lift into an apparent 0.076
+edge, which is exactly the error step 10 was built to catch.
+
+**No hyperparameter search.** Settings are fixed, conservative, and chosen for
+the sample size rather than tuned on it. A grid would multiply the trial count
+the Deflated Sharpe Ratio depends on, for a model class the evidence already
+says is too big for the data.
+
+### 2026-11-14 · Trial counter moves to 5
+
+Decided (Aksh, pending Vansh's confirmation): the counter is **5** -- the five
+models in `model_zoo`, scored per ticker.
+
+Per the counter's own rule, a trial is a configuration we got a performance
+number out of and could therefore have selected on. The three schemes are
+measurements of the same model rather than alternatives we would choose
+between, so they do not multiply it. Each ticker gets its own model and its own
+Deflated Sharpe Ratio, so the five tickers do not multiply it either. No
+hyperparameter grid was run, so nothing is hidden there.
+
+**Configurations evaluated so far: 5**
+
+### 2026-11-14 · Review of step 6: three scoring fixes, and a better null
+
+Reviewed (Vansh, on Aksh's step 6). Every number in the step 6 entry
+reproduces, 121 tests passed, and the purging machinery came through clean. The
+central conclusion -- the gap is zero because the control is contiguous -- is
+correct and was predicted in writing beforehand. Four things about how the
+numbers were *presented* were wrong, and all of them fed straight into the
+write-up.
+
+**1. Precision was averaged across folds, and the averaging inflated it.**
+
+Our models act on as little as 11% of bars, and the per-fold action count
+swings by an order of magnitude inside a single ticker -- 157, 22, 170, 225, 50
+for logistic on SPY. An unweighted mean of per-fold ratios gives the 22-action
+fold the same say as the 225-action one, and a small denominator is a noisy one
+that reliably reads high.
+
+| model | pooled | unweighted fold mean | inflation |
+| --- | --- | --- | --- |
+| logistic | 0.4532 | 0.4930 | +0.040 |
+| gbt | 0.4435 | 0.4546 | +0.011 |
+| meta_crossover_logistic | 0.4891 | 0.5160 | **+0.027** |
+
+Worst for the model whose entire claim is precision. Meta-labelling's margin
+over always-act drops from +0.111 to +0.084 -- still the best of the five, and
+the conclusion survives, but a quarter smaller than reported. `summarise` now
+sums `n_true_pos` and `n_acts` and divides once.
+
+**2. The printed precision benchmark was the majority rate, which is the wrong
+number.**
+
+The table showed `majority_rate` = 0.596. Precision is read against the
+**positive rate, 0.404** -- the number always-act scores by construction. At
+40% positives those two differ by 0.19, and against 0.596 every model looks
+like a failure. The step 6 entry had it right in prose and the code had it
+wrong, which is the sort of disagreement that becomes an error in the write-up.
+
+**3. Coverage was not reported at all.**
+
+Precision alone rewards abstention: a model acting once and getting it right
+scores 1.0. The pair has to travel together.
+
+| model | coverage | pooled precision | vs benchmark |
+| --- | --- | --- | --- |
+| buy_and_hold | 100.0% | 0.405 | +0.001 |
+| ma_crossover | 63.0% | 0.420 | +0.016 |
+| logistic | **11.0%** | 0.453 | +0.049 |
+| gbt | 26.2% | 0.444 | +0.040 |
+| meta_crossover_logistic | **13.7%** | 0.489 | +0.085 |
+
+**4. The gap's standard error was the wrong statistic, and the right one is
+ten times tighter.**
+
+`NaiveKFold(shuffle=False)` and `PurgedKFold` split the same rows the same way,
+so their test folds are *identical* -- verified on all 125 of them -- and only
+the training sets differ. The gap is therefore a paired comparison, and its
+noise is the spread of per-fold differences:
+
+| model | gap | paired s.e. | t | s.e. previously quoted |
+| --- | --- | --- | --- | --- |
+| logistic | +0.00027 | 0.00087 | **0.31** | 0.0168 |
+| gbt | -0.00038 | 0.00202 | -0.19 | 0.0160 |
+| meta | +0.00009 | 0.00039 | 0.24 | 0.0148 |
+
+The conclusion is unchanged and better supported. "Fifty times smaller than the
+noise" divided the gap by the noise on a different comparison; the honest line
+is **gap +0.0003, paired standard error 0.0009, t = 0.31**. `paired_gap` in
+`src/evaluate.py`, with a test showing the paired error collapsing to zero on
+folds that move together while the unpaired one stays wide.
+
+### 2026-11-14 · A null measured on real bars: the floor is 0.529, not 0.544
+
+Added (Vansh): `sign_flipped_ohlc` in `src/synthetic.py` and
+`scripts/check_floor_real.py`.
+
+`NO_SIGNAL_FLOOR = 0.544` came from a constant-volatility Gaussian random walk.
+Real ETFs cluster their volatility and have fat tails, and the floor is
+*produced* by a volatility channel, so whether that number transfers is a fair
+question. It was worth checking before the write-up rested on it.
+
+The test: multiply each daily return by a random +/-1. That leaves every
+`|r_t|` untouched, so the volatility path survives -- rolling sigma correlates
+**0.998** with the real one on SPY -- while all directional predictability is
+destroyed. Intraday reach magnitudes carry over too, so the barrier-touch rate
+and hence the timeout rate are preserved. An ordinary randomisation test.
+
+| ticker | floor | sd |
+| --- | --- | --- |
+| SPY | 0.540 | 0.015 |
+| QQQ | 0.525 | 0.016 |
+| IWM | 0.520 | 0.021 |
+| TLT | 0.523 | 0.034 |
+| GLD | 0.535 | 0.013 |
+| **pooled** | **0.529** | 0.021 (s.e. 0.0039, n=30) |
+
+**The synthetic floor is conservative, which is the safe direction to be
+wrong.** The real floor is 0.015 lower, so 0.544 *understates* logistic's lift:
++0.047 against the real null rather than +0.032. Nothing reported so far was
+flattered by the error.
+
+Three reasons to switch anyway: it is measured on the real feature
+distribution at the real sample size through the real folds; it is per ticker,
+and the 0.520-to-0.540 spread is hidden by a single constant; and its standard
+error is 0.0039 against the synthetic's 0.040 seed spread, so it stops being
+the dominant uncertainty in the lift. Combined with the paired standard error,
+logistic's lift goes from "1.9 s.e., suggestive" to roughly 2.7.
+
+**Not wired in.** Swapping the floor moves a headline number, so it needs both
+of us. The script prints the comparison; `NO_SIGNAL_FLOOR` is untouched.
+
+One thing that fell out and belongs in the write-up. Real lag-1 return
+autocorrelation, pre-holdout: SPY -0.107, QQQ -0.089, IWM -0.077, TLT -0.024,
+GLD -0.010. Step 10's power curve puts detection at about phi = +0.4. The real
+structure is an order of magnitude smaller than the smallest signal the
+pipeline can resolve, and the wrong sign for momentum besides. So the null
+result is exactly what the instrument predicts rather than a surprise -- which
+is a far better sentence than "we found nothing", and it is the one the
+synthetic check was built to earn.
+
+### 2026-11-14 · Steps 7, 8 and 9: the index wins, and the best classifier is the worst strategy
+
+Added (Aksh): `src/backtest.py`, `src/metrics.py`, `scripts/run_backtest.py`,
+`oof_predictions` in `src/evaluate.py`, and tests for all of it. Out-of-fold
+predictions under the purged scheme, turned into positions, costed, and
+measured. Averaged over the five tickers, pre-holdout.
+
+| model | Sharpe | SE | t | max DD | turnover | exposure | Sharpe @10bps | DSR @0 | DSR @10 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| buy_and_hold | **0.480** | 0.242 | 1.99 | 0.514 | 0.1 | 1.00 | 0.480 | 0.820 | 0.778 |
+| ma_crossover | 0.363 | 0.242 | 1.50 | 0.360 | 4.8 | 0.68 | 0.329 | 0.655 | 0.560 |
+| logistic | 0.057 | 0.242 | 0.24 | 0.284 | 10.2 | 0.22 | **-0.058** | 0.282 | 0.138 |
+| gbt | 0.410 | 0.242 | 1.70 | 0.358 | 18.9 | 0.51 | 0.259 | 0.714 | 0.478 |
+| meta_crossover_logistic | 0.328 | 0.242 | 1.36 | **0.201** | 9.5 | 0.23 | 0.206 | 0.623 | 0.435 |
+
+**Buy-and-hold has the best Sharpe, and no model beats it.** That is the
+result. It is a modest and partly negative finding, and the rubric says in
+writing that such a result earns full credit when the reasoning is sound.
+
+**The best classifier is the worst strategy.** Logistic had the highest AUC in
+step 6 at 0.576 and has the lowest Sharpe here at 0.057, turning negative at 10
+bps. Ranking ability and money are different questions: AUC asks whether the
+model orders bars correctly, and a strategy asks whether the bars it chose to
+hold went up by more than the trading cost. A project that stopped at the AUC
+table would have reported logistic as the winner. This is the single most
+useful thing steps 7 to 9 added.
+
+**Turnover is what does the damage.** The gradient-boosted trees trade 18.9
+times a year and lose a third of their Sharpe between 0 and 10 bps, 0.410 to
+0.259. Buy-and-hold trades 0.1 times a year and loses nothing. This is the cost
+sensitivity the proposal promised, and it is doing real work rather than
+decorating a table.
+
+**Almost nothing is distinguishable from zero.** The standard error is 0.242
+for every model, because at roughly 4,300 daily bars the error is set by the
+sample and not by the strategy -- Lo's formula depends on the Sharpe only
+through a term that is negligible when the per-period ratio is this small. Only
+buy-and-hold reaches t = 2, and that is the index having risen, not a discovery.
+
+**No Deflated Sharpe clears a convincing bar.** The luckiest of five skill-less
+tries would be expected to show an annualised Sharpe of 0.25, which is half of
+what buy-and-hold achieved and more than any learned model achieved. The best
+DSR is buy-and-hold's 0.82 and the best learned model is the trees at 0.71,
+falling to 0.48 at 10 bps. Nothing is near 0.95.
+
+Honest caveats, for limitations:
+
+- **The exposure column makes this not quite apples to apples.** Buy-and-hold
+  is invested 100% of the time; logistic is invested 22%. A Sharpe comparison
+  across different exposures rewards being in a rising market, and 2005-2022 on
+  these five ETFs was mostly a rising market. Meta-labelling's drawdown of 0.20
+  against buy-and-hold's 0.51 is the other side of that: less time in the
+  market is less time exposed to the crash.
+- **Four of five folds train partly on the future.** This is a cross-validated
+  backtest, not a simulation of trading, and the equity curve is labelled as
+  such. Walk-forward is the scheme that does not do this.
+- **Lo's standard error assumes IID returns.** Daily returns are serially
+  correlated and volatility clusters, so 0.242 understates the true error. It
+  is still better than quoting no error at all, which is the usual practice.
+- **N = 5 is what we admit to.** The DSR is only as honest as that count.
+
+Design decisions worth recording, both in `src/backtest.py`:
+
+**The holding period comes from the label.** A signal at the close of *t* opens
+a position on the next bar and holds until `t1`. The model was trained to
+answer "does the upper barrier fall first", so the trade the backtest runs is
+the trade the label scores. A fixed ten-day hold would measure something the
+model was never asked about.
+
+**Overlapping signals do not stack.** Position is capped at one unit. Labels
+overlap by construction -- the subject of the whole project -- so on most bars
+several predictions are live, and stacking them would make leverage a function
+of signal density and turnover meaningless. The cost is that a strong run of
+signals looks like a single one.
+
+### 2026-11-14 · Review of steps 7-9: exposure, not turnover, is what sinks logistic
+
+Reviewed (Vansh, on Aksh's steps 7-9). Every number reproduces, 158 tests
+passed, and the hard parts are right. Specifically checked and correct: the DSR
+matches Bailey and Lopez de Prado (2014) equation 5 including the
+Euler-Mascheroni weighting; `sharpe_se` is Lo (2002) for the IID case with the
+per-period ratio inside it and the annualisation outside, and the 0.242 it
+reports is analytically exactly `sqrt(252/4300)`; `positions` opens on the bar
+after the signal and the difference-array bounds are safe at both ends of the
+calendar.
+
+**A check worth recording, because somebody will ask.** The label is an
+*intraday* barrier touch while the backtest exits at the *close* of `t1`, so a
+correct prediction need not be a winning trade. Measured: a label=1 row is a
+winning close-to-close trade **99.4%** of the time, mean +2.67% against -1.40%
+for label=0, a spread of **+4.06% per trade**. The label and the money are
+aligned, and a perfect classifier would have made a fortune. That rules out the
+obvious alternative explanation for the headline, so the headline is about the
+models rather than about the label.
+
+**The one correction: "turnover is what does the damage" is right for the trees
+and wrong for logistic.**
+
+At 0 bps there are no costs at all, and logistic is already at 0.057 against
+buy-and-hold's 0.480. Turnover cannot explain a gap that exists before any
+turnover is charged. The step 7-9 entry does flag exposure as a caveat, but
+then attributes the damage to turnover in a heading, and the caveat is the
+mechanism.
+
+Added `exposure_matched_sharpe` in `src/metrics.py` to make it a number rather
+than an apology: shuffle the position series, which holds the *count* of
+invested bars exactly and destroys *which* bars they were, and average over 200
+draws. That is what a strategy with this exposure and no selection skill
+scores. Buy-and-hold validates the control -- at ~100% exposure there is
+nothing to shuffle and its edge comes out -0.0008.
+
+At 0 bps, averaged over the five tickers:
+
+| model | exposure | matched benchmark | actual | selection edge | t |
+| --- | --- | --- | --- | --- | --- |
+| buy_and_hold | 1.00 | 0.481 | 0.480 | -0.001 | -0.54 |
+| ma_crossover | 0.68 | 0.391 | 0.363 | -0.028 | -0.43 |
+| logistic | 0.22 | 0.221 | 0.057 | **-0.164** | **-2.36** |
+| gbt | 0.51 | 0.340 | 0.410 | +0.071 | 1.37 |
+| meta_crossover_logistic | 0.23 | 0.228 | 0.328 | +0.099 | 0.84 |
+
+The decomposition for logistic reads **0.480 -> 0.221 -> 0.057 -> -0.058**:
+most of the fall is exposure, because being out of the market 78% of the time
+forfeits the equity premium whatever you pick; then negative selection; then
+cost. Three mechanisms, and the write-up should name all three rather than
+blaming turnover for the lot.
+
+**No model shows significant positive selection.** The trees at +0.071 and
+meta-labelling at +0.099 are the right sign but t = 1.37 and 0.84, which is
+nothing. The only result that clears two standard errors is **logistic's
+negative edge**: it picks worse-than-random days, and it does so while having
+the highest AUC of the five. That is a sharper version of Aksh's finding rather
+than a contradiction of it -- ranking ability and profitability are different
+questions, and here they point in opposite directions.
+
+It also squares with step 6. Meta-labelling had the best precision there, 0.489
+against the 0.404 base rate, and it has the best selection edge here. Two
+different instruments agreeing on the same weak signal is worth a sentence in
+the write-up, as long as that sentence says the signal is not significant.
+
+**One limitation to add about the DSR.** `sr_std` is the spread of Sharpes
+across five *structurally different* strategies, two of which -- buy-and-hold
+and the crossover -- are fixed references rather than search outcomes. The
+expected-maximum formula assumes N draws from a distribution of zero-skill
+configurations. Using the observed spread of heterogeneous strategies instead
+is a defensible approximation and a conservative one, since the spread is wider
+than a true zero-skill distribution would be, which raises the benchmark and
+lowers every DSR. Worth one sentence rather than a rework.
+
 ---
 ## Open questions
 
@@ -719,6 +1059,10 @@ Move these into the log as dated entries once decided.
   slider combinations as full equity curves is hundreds of megabytes. Plan:
   ship the ~42 position series (purging × embargo) and apply cost and
   execution lag in the browser. Confirm before building.
+- **Adopt the sign-flip floor of 0.529 in place of the synthetic 0.544?**
+  Needs Aksh. It is better calibrated and per ticker, and it raises
+  logistic's lift from +0.032 to +0.047. `scripts/check_floor_real.py`
+  prints it; wiring it in is a one-line change to `NO_SIGNAL_FLOOR`.
 - **Is the DSR a live number or a fixed one?** It depends on the total trial
   count, which is a property of the whole project, not of a slider position.
   Probably display it fixed, with the per-configuration Sharpe live.
