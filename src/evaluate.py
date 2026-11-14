@@ -119,3 +119,32 @@ def paired_gap(folds, left, right, value="auc"):
     # with zero spread. That is a degenerate t, not a significant one.
     out["t"] = np.where(out["paired_se"] > 0, out["gap"] / out["paired_se"], np.nan)
     return out
+
+
+def oof_predictions(pipeline, X, y, cv):
+    """Out-of-fold predictions for every row, as the backtest needs them.
+
+    Each row is predicted by a model that never saw it in training, so the
+    resulting series is a strategy that could in principle have been run --
+    subject to the one thing cross-validation can never give you, which is that
+    four of the five folds were trained partly on the future. That is why
+    walk-forward exists beside it, and why the equity curve this produces is
+    labelled a cross-validated backtest rather than a simulation of trading.
+
+    With PurgedKFold every row is in exactly one test fold, so the predictions
+    tile the sample without overlap. Returns a frame of `pred` and `proba`
+    indexed as `X` is, plus the fold each row came from.
+    """
+    from sklearn.base import clone
+
+    pred = pd.Series(np.nan, index=X.index, dtype=float)
+    proba = pd.Series(np.nan, index=X.index, dtype=float)
+    fold_of = pd.Series(np.nan, index=X.index, dtype=float)
+
+    for fold, (train, test) in enumerate(cv.split(X)):
+        est = clone(pipeline).fit(X.iloc[train], y.iloc[train])
+        pred.iloc[test] = est.predict(X.iloc[test])
+        proba.iloc[test] = est.predict_proba(X.iloc[test])[:, 1]
+        fold_of.iloc[test] = fold
+
+    return pd.DataFrame({"pred": pred, "proba": proba, "fold": fold_of})

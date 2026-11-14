@@ -901,6 +901,81 @@ result is exactly what the instrument predicts rather than a surprise -- which
 is a far better sentence than "we found nothing", and it is the one the
 synthetic check was built to earn.
 
+### 2026-11-14 · Steps 7, 8 and 9: the index wins, and the best classifier is the worst strategy
+
+Added (Aksh): `src/backtest.py`, `src/metrics.py`, `scripts/run_backtest.py`,
+`oof_predictions` in `src/evaluate.py`, and tests for all of it. Out-of-fold
+predictions under the purged scheme, turned into positions, costed, and
+measured. Averaged over the five tickers, pre-holdout.
+
+| model | Sharpe | SE | t | max DD | turnover | exposure | Sharpe @10bps | DSR @0 | DSR @10 |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| buy_and_hold | **0.480** | 0.242 | 1.99 | 0.514 | 0.1 | 1.00 | 0.480 | 0.820 | 0.778 |
+| ma_crossover | 0.363 | 0.242 | 1.50 | 0.360 | 4.8 | 0.68 | 0.329 | 0.655 | 0.560 |
+| logistic | 0.057 | 0.242 | 0.24 | 0.284 | 10.2 | 0.22 | **-0.058** | 0.282 | 0.138 |
+| gbt | 0.410 | 0.242 | 1.70 | 0.358 | 18.9 | 0.51 | 0.259 | 0.714 | 0.478 |
+| meta_crossover_logistic | 0.328 | 0.242 | 1.36 | **0.201** | 9.5 | 0.23 | 0.206 | 0.623 | 0.435 |
+
+**Buy-and-hold has the best Sharpe, and no model beats it.** That is the
+result. It is a modest and partly negative finding, and the rubric says in
+writing that such a result earns full credit when the reasoning is sound.
+
+**The best classifier is the worst strategy.** Logistic had the highest AUC in
+step 6 at 0.576 and has the lowest Sharpe here at 0.057, turning negative at 10
+bps. Ranking ability and money are different questions: AUC asks whether the
+model orders bars correctly, and a strategy asks whether the bars it chose to
+hold went up by more than the trading cost. A project that stopped at the AUC
+table would have reported logistic as the winner. This is the single most
+useful thing steps 7 to 9 added.
+
+**Turnover is what does the damage.** The gradient-boosted trees trade 18.9
+times a year and lose a third of their Sharpe between 0 and 10 bps, 0.410 to
+0.259. Buy-and-hold trades 0.1 times a year and loses nothing. This is the cost
+sensitivity the proposal promised, and it is doing real work rather than
+decorating a table.
+
+**Almost nothing is distinguishable from zero.** The standard error is 0.242
+for every model, because at roughly 4,300 daily bars the error is set by the
+sample and not by the strategy -- Lo's formula depends on the Sharpe only
+through a term that is negligible when the per-period ratio is this small. Only
+buy-and-hold reaches t = 2, and that is the index having risen, not a discovery.
+
+**No Deflated Sharpe clears a convincing bar.** The luckiest of five skill-less
+tries would be expected to show an annualised Sharpe of 0.25, which is half of
+what buy-and-hold achieved and more than any learned model achieved. The best
+DSR is buy-and-hold's 0.82 and the best learned model is the trees at 0.71,
+falling to 0.48 at 10 bps. Nothing is near 0.95.
+
+Honest caveats, for limitations:
+
+- **The exposure column makes this not quite apples to apples.** Buy-and-hold
+  is invested 100% of the time; logistic is invested 22%. A Sharpe comparison
+  across different exposures rewards being in a rising market, and 2005-2022 on
+  these five ETFs was mostly a rising market. Meta-labelling's drawdown of 0.20
+  against buy-and-hold's 0.51 is the other side of that: less time in the
+  market is less time exposed to the crash.
+- **Four of five folds train partly on the future.** This is a cross-validated
+  backtest, not a simulation of trading, and the equity curve is labelled as
+  such. Walk-forward is the scheme that does not do this.
+- **Lo's standard error assumes IID returns.** Daily returns are serially
+  correlated and volatility clusters, so 0.242 understates the true error. It
+  is still better than quoting no error at all, which is the usual practice.
+- **N = 5 is what we admit to.** The DSR is only as honest as that count.
+
+Design decisions worth recording, both in `src/backtest.py`:
+
+**The holding period comes from the label.** A signal at the close of *t* opens
+a position on the next bar and holds until `t1`. The model was trained to
+answer "does the upper barrier fall first", so the trade the backtest runs is
+the trade the label scores. A fixed ten-day hold would measure something the
+model was never asked about.
+
+**Overlapping signals do not stack.** Position is capped at one unit. Labels
+overlap by construction -- the subject of the whole project -- so on most bars
+several predictions are live, and stacking them would make leverage a function
+of signal density and turnover meaningless. The cost is that a strong run of
+signals looks like a single one.
+
 ---
 ## Open questions
 
