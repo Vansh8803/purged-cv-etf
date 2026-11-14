@@ -102,6 +102,19 @@ python scripts/report_uniqueness.py   # how much independent data we actually ha
 `build_labels.py` takes every parameter from `config.yaml` and prints a
 per-ticker summary over pre-holdout rows only.
 
+Then the validity check, which has to pass before any real-data number means
+anything:
+
+```powershell
+python scripts/check_synthetic.py
+```
+
+It runs the real pipeline on synthetic series with a known answer, over ten
+seeds. Exits non-zero if any of its three checks fail. It also reports the
+**no-signal AUC floor, currently 0.544** — real-data AUC is read against that,
+not against 0.500, because the label leaks through volatility. See
+decision-log.md, 2026-11-10.
+
 Steps 1 and 2 are done. Remaining build order is step-by-step in
 [`project_details.md`](project_details.md#build-order). Step 3 (`PurgedKFold`)
 is next and gets tested harder than feels necessary.
