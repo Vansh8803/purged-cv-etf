@@ -2,7 +2,7 @@
 
     python scripts/build_site_data.py
 
-Writes `site/data.json`.
+Writes `docs/data.json`.
 
 **What is precomputed and what is not.** All four controls crossed is
 2 x 21 x 21 x 2 = 1,764 combinations, and a full equity curve for each is
@@ -44,7 +44,7 @@ sys.path.insert(0, str(ROOT))
 
 from src.features import load_labelled
 
-OUT = ROOT / "site"
+OUT = ROOT / "docs"
 MODELS = ["buy_and_hold", "ma_crossover", "logistic", "gbt",
           "meta_crossover_logistic"]
 

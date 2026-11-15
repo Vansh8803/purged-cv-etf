@@ -8,7 +8,9 @@ Ratio depends on.
 **Rules.** One entry per decision, and record the *reason*, not just the
 outcome. If a decision is reversed, add a new entry — never edit an old one.
 Attribute honestly: who decided what, so the viva can be answered by whoever
-is asked.
+is asked. The submission instructions require an AI-use disclosure, which lives
+in the README and is sourced from this file — so record what AI assistance was
+used for, on the day it happens.
 
 ---
 
@@ -1404,6 +1406,64 @@ machinery was vindicated; the models were not.
 **The holdout is now closed permanently.** Nothing upstream of this entry may
 be changed on the strength of it. No barrier width, feature, model setting,
 embargo or threshold moves from here.
+
+### 2026-11-15 · Reversal: the AI-use disclosure IS required
+
+Reversed (Vansh, after reading the submission instructions). On 2026-11-10 we
+removed the AI-disclosure rule from the block at the top of this file, on the
+strength of a recollection that the professor had said it was not needed. The
+submission instructions state plainly that the repository must contain "your
+AI-use disclosure and citations".
+
+So the rule goes back, and the disclosure now exists as a section of the README
+rather than scattered through this log. It is specific rather than a formality:
+what Claude wrote, what it caught that we had wrong, what we decided ourselves,
+and what it did not do.
+
+Worth recording why this happened, because it is the same failure mode the
+project is about. A claim about the course requirements was asserted without
+being checked against the written instructions, acted on, and then a rule was
+deleted on the strength of it. The instructions were sitting in `../planning/`
+the whole time. Neither of us read them until step 13 was due.
+
+### 2026-11-15 · The website is the submission, so it now carries the argument
+
+Changed (Vansh, after reading the submission instructions). The site was a
+control panel over the backtest. The instructions say a grader will assess the
+project "entirely from what you submit, including your understanding, which we
+will judge from how clearly the website reasons from the question to the
+conclusions", and list eight things it must cover.
+
+`docs/index.html` is now the full report: the question and what one row is; the
+data with its source, size and the dividend-adjustment problem; the label and
+the barrier-width decision that nearly broke the project; preprocessing and the
+in-fold leak; the baseline and the five models; the three schemes, the metrics
+and their baselines including the 0.544 floor; the results with the gap as a
+range; the error analysis; the interactive panel; the holdout; and eleven
+limitations. The panel is the required interaction and it is kept, because
+"switch the scheme and watch the curve not move" is the finding made visible.
+
+Two choices behind it.
+
+**Every table renders from `docs/data.json`, not from hard-coded HTML.**
+`scripts/build_site_findings.py` reads the result CSVs and writes a `findings`
+block beside the position series. On the graded page, a transcribed number is a
+number that will eventually be wrong; this way rerunning an experiment and
+rebuilding updates the page with no edit. Verified: every table id in the HTML
+has a renderer and data behind it, and the ten headline figures the prose
+asserts match the JSON exactly.
+
+**`site/` is now `docs/`.** GitHub Pages serves a repository's `docs/` folder on
+the default branch with one setting and no CI workflow. One setting is the least
+that can break the day before a deadline.
+
+### 2026-11-15 · Results regenerated after the review fixes
+
+Housekeeping (Vansh). `outputs/step06_*.csv` and `step789_*.csv` were still from
+2026-11-14, before the review fixes to pooled precision, the positive-rate
+benchmark and the paired standard error. The website presents those numbers, so
+both scripts were rerun and the site rebuilt from the new CSVs. The code had
+been correct since the fixes; only the saved tables were stale.
 
 ---
 ## Open questions

@@ -12,7 +12,13 @@ The model is the vehicle. The spread between those numbers is the result.
 - **Every decision, dated** — [`decision-log.md`](decision-log.md)
 - **Every tunable parameter** — [`config.yaml`](config.yaml)
 
-This file only says how to run it.
+**The website is the submission.** It carries the full reasoning — question,
+data, preprocessing, models, evaluation, results, error analysis and
+limitations — with one interactive panel:
+
+- **[vansh8803.github.io/purged-cv-etf](https://vansh8803.github.io/purged-cv-etf/)**
+
+This repository is what lets you verify it. This file says how to run it.
 
 ---
 
@@ -166,9 +172,9 @@ it, so this is the only output that can satisfy it.
 Then the site (steps 11 and 12):
 
 ```powershell
-python scripts/build_site_data.py    # the precomputed grid -> site/data.json
+python scripts/build_site_data.py    # the precomputed grid -> docs/data.json
 python scripts/check_site_data.py    # does the browser agree with the modules?
-cd site; python -m http.server 8000  # then open http://localhost:8000
+cd docs; python -m http.server 8000  # then open http://localhost:8000
 ```
 
 A local server is needed because browsers block `fetch` from `file://`. The
@@ -183,7 +189,7 @@ execution lag are applied arithmetically in the browser. That was decided on
 `check_site_data.py` is the guard that matters. The site re-implements the
 backtest in JavaScript, so the same arithmetic now exists twice in two
 languages. That script ports the JavaScript back into Python, runs it against
-`site/data.json`, and compares with `src/backtest.py` and `src/metrics.py`
+`docs/data.json`, and compares with `src/backtest.py` and `src/metrics.py`
 computed from scratch. It exits non-zero on any disagreement, and it also
 checks that the run-length encoding round-trips and that no holdout bar is in
 the file. Run it after anything upstream changes.
@@ -197,6 +203,140 @@ Tests, once there are any:
 ```powershell
 python -m pytest -q
 ```
+
+## Data access
+
+Everything needed to reproduce the results is already in this repository. No
+credentials, no API key, no download.
+
+- `data/raw/` holds the five cached CSVs, committed on purpose. Each is one ETF
+  of daily OHLCV from Yahoo Finance via `yfinance`, 2005-01-03 to 2025-12-30,
+  5,282 rows, named with the date it was downloaded: `2026-10-16`.
+- `data/processed/` and `outputs/` are **gitignored**, because everything in
+  them is regenerable from `data/raw/`. The commands under *Running things*
+  rebuild them in order.
+- `docs/data.json` **is** committed, because the website cannot be served from a
+  clone without it.
+
+**Do not re-download.** Yahoo restates adjusted prices retroactively, so a
+fresh download would silently change numbers computed from the old one. That is
+why the filenames carry a download date and why `scripts/download_data.py`
+skips tickers that are already cached. If you genuinely need a refresh, pass
+`--force` and it writes a *new* dated file rather than overwriting.
+
+To verify the cached data is what we say it is:
+
+```powershell
+python -c "import pandas as pd; d=pd.read_csv('data/raw/SPY_2005-01-01_2025-12-31_dl2026-10-16.csv'); print(len(d), d.Date.min(), d.Date.max(), int(d.isna().sum().sum()))"
+```
+
+## Reproducing the results
+
+Every number on the website comes from one of these, in this order. Timings are
+from a laptop; the two model scripts dominate.
+
+| command | produces | roughly |
+| --- | --- | --- |
+| `python src/data_process.py` | `data/processed/*_features.csv` | seconds |
+| `python scripts/build_labels.py` | `data/processed/*_labelled.csv` | seconds |
+| `python scripts/report_uniqueness.py` | effective sample size table | seconds |
+| `python scripts/check_synthetic.py` | the no-signal floor and power curve | ~2 min |
+| `python scripts/run_models.py` | `outputs/step06_*.csv` | ~3 min |
+| `python scripts/run_backtest.py` | `outputs/step789_*.csv` | ~5 min |
+| `python scripts/run_embargo_sweep.py` | `outputs/embargo_sweep.csv`, positions | ~12 min |
+| `python scripts/find_errors.py` | `outputs/representative_errors.csv` | ~2 min |
+| `python scripts/open_holdout.py` | `outputs/step13_holdout.csv` | ~1 min |
+| `python scripts/build_site_data.py` | `docs/data.json` | seconds |
+| `python scripts/build_site_findings.py` | the website's tables | seconds |
+
+Then `python -m pytest -q` for the 161 tests, and
+`python scripts/check_site_data.py`, which re-implements the website's
+JavaScript in Python and asserts it agrees with `src/backtest.py` and
+`src/metrics.py`.
+
+All randomness is seeded from `seed` in `config.yaml`, so repeated runs give
+identical numbers.
+
+**Splits are code, not prose.** The exact splits are `PurgedKFold`,
+`WalkForward` and `NaiveKFold` in [`src/cv.py`](src/cv.py), all built on the one
+overlap rule in [`src/purging.py`](src/purging.py), and the holdout boundary is
+`purged_holdout_mask` in the same file. The test suite asserts the properties
+rather than the outputs: `tests/test_cv.py` checks that no surviving training
+row's label window overlaps its test fold, and `tests/test_purging.py` pins the
+embargo as exclusive at the start and inclusive at the end.
+
+## AI-use disclosure
+
+We used Anthropic's Claude (Claude Code, Opus) throughout, substantially and
+for real work rather than for polish. An honest account, since a vague one is
+worse than none:
+
+**What it wrote.** Most of the code in `src/` and `scripts/` was written or
+substantially rewritten by Claude, in dialogue with us: the triple-barrier
+labelling and its vectorised form, the uniqueness and purging modules, the
+three splitters, the feature pipeline, the five models, the backtester, the
+metrics including the Deflated Sharpe Ratio, the synthetic check, the embargo
+sweep, the error analysis, this README, the decision-log prose, and the
+website. The test suite is largely its work too.
+
+**What it caught that we had wrong.** This is the part worth being specific
+about. It found that our original ±1-sigma barrier made the median label
+resolve in a single bar, which would have left purging nothing to purge and
+made the headline result an artifact. It found that `t1` was being computed in
+calendar days rather than trading bars, which would have corrupted every purge
+decision. It found that the label leaks through volatility, so the no-signal
+AUC floor is about 0.544 rather than 0.500 — without which we would have
+reported the floor as a modest edge. It found that our precision figures were
+inflated by averaging across folds with unequal action counts, that we were
+printing the majority-class rate where the positive rate belonged, and that the
+control-versus-purged gap needed a paired standard error. It found a hole in our
+own step-3 test suite by deliberately breaking the code to see what the tests
+caught. And it caught a bug in the holdout script before any holdout number was
+printed.
+
+**What we decided.** Every choice in `decision-log.md` is ours: the subject of
+the project, the universe, the binary target, the barrier width, the contiguous
+control, per-ticker models, declining to adopt the sign-flip floor, and the
+decision to report the holdout exactly as it came out. Claude argued with us
+about several of these and we overruled it on some. Where it proposed something
+we accepted, the log says so and names it.
+
+**What it did not do.** It did not choose the research question, open the
+holdout on its own, or decide what to report. We read every number it produced
+and re-derived the ones the viva covers.
+
+This disclosure was itself added late: an earlier session removed an AI
+disclosure rule from `decision-log.md` on our incorrect assurance that the
+course did not require one. The submission instructions do require it. The
+removal and this correction are both dated in the log.
+
+## Citations
+
+**Methods.** The purging and embargo construction, the triple-barrier label,
+average uniqueness and meta-labelling all follow Marcos López de Prado,
+*Advances in Financial Machine Learning* (Wiley, 2018), chapters 3 to 7. We
+read it as a reference and wrote our own implementations; `mlfinlab` and
+similar libraries are deliberately not used, since the method is the subject of
+the project.
+
+The Deflated Sharpe Ratio, including the expected-maximum formula with its
+Euler–Mascheroni weighting, is David H. Bailey and Marcos López de Prado, *The
+Deflated Sharpe Ratio: Correcting for Selection Bias, Backtest Overfitting and
+Non-Normality*, Journal of Portfolio Management 40(5), 2014.
+
+The standard error of the Sharpe ratio is Andrew W. Lo, *The Statistics of
+Sharpe Ratios*, Financial Analysts Journal 58(4), 2002. We use the IID case and
+say so in the limitations.
+
+Ernest P. Chan, *Quantitative Trading*, informed the backtesting discipline —
+costs as a parameter, turnover, and not trusting a Sharpe ratio without its
+error bars. The book itself is not redistributed here.
+
+**Data.** Yahoo Finance, accessed through `yfinance`.
+
+**Software.** numpy, pandas, scikit-learn, scipy, PyYAML, yfinance, pytest.
+Exact versions are pinned in `requirements.lock.txt`; install from that rather
+than from `requirements.txt`.
 
 ## The holdout
 
@@ -215,7 +355,7 @@ requirements.txt       dependency floors
 requirements.lock.txt  exact pins — install from this one
 data/raw/              cached OHLCV, committed, never re-downloaded
 scripts/               one-off utilities; download_data.py lives here
-site/                  the control panel: index.html plus its precomputed data
+docs/                  the website (GitHub Pages serves this folder)
 outputs/               generated tables and position series; gitignored
 ```
 

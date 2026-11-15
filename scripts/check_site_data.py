@@ -8,8 +8,8 @@ lag can be applied in the browser instead of being precomputed. That is the
 megabytes -- but it means the same arithmetic now exists twice, in two
 languages, and nothing stops the two drifting apart.
 
-This is the guard. It ports the JavaScript in `site/index.html` line for line
-into Python, runs it against `site/data.json`, and compares the result with
+This is the guard. It ports the JavaScript in `docs/index.html` line for line
+into Python, runs it against `docs/data.json`, and compares the result with
 `src/backtest.py` and `src/metrics.py` computed from scratch. If they
 disagree, the site is lying to whoever reads it, and that is a worse failure
 than a wrong number in a notebook because it looks authoritative.
@@ -95,7 +95,7 @@ def python_stats(pos, log_return, cost_bps):
 
 def main() -> int:
     cfg = yaml.safe_load((ROOT / "config.yaml").read_text())
-    path = ROOT / "site" / "data.json"
+    path = ROOT / "docs" / "data.json"
     if not path.exists():
         print(f"!! {path} missing — run scripts/build_site_data.py first")
         return 1
@@ -105,7 +105,7 @@ def main() -> int:
     folds, seed = cfg["split"]["n_folds"], cfg["seed"]
     failures = []
 
-    print(f"site/data.json — {path.stat().st_size / 1024:,.0f} KB, "
+    print(f"docs/data.json — {path.stat().st_size / 1024:,.0f} KB, "
           f"{len(d['dates'])} bars, built {d['meta']['built']}")
 
     # --- the holdout boundary
