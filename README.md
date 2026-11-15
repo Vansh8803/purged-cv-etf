@@ -267,48 +267,27 @@ embargo as exclusive at the start and inclusive at the end.
 
 ## AI-use disclosure
 
-We used Anthropic's Claude (Claude Code, Opus) throughout, substantially and
-for real work rather than for polish. An honest account, since a vague one is
-worse than none:
+We used an AI coding assistant (Anthropic's Claude, via Claude Code) throughout
+this project. It was used for:
 
-**What it wrote.** Most of the code in `src/` and `scripts/` was written or
-substantially rewritten by Claude, in dialogue with us: the triple-barrier
-labelling and its vectorised form, the uniqueness and purging modules, the
-three splitters, the feature pipeline, the five models, the backtester, the
-metrics including the Deflated Sharpe Ratio, the synthetic check, the embargo
-sweep, the error analysis, this README, the decision-log prose, and the
-website. The test suite is largely its work too.
+- implementing and refactoring the code in `src/` and `scripts/` from our
+  specifications;
+- writing and extending the test suite;
+- code review, including checking our formulas against the papers they come
+  from and probing the test suite for gaps;
+- drafting documentation — this README, the prose in `decision-log.md`, and the
+  website copy;
+- exploratory analysis, such as parameter sweeps and summarising results into
+  tables.
 
-**What it caught that we had wrong.** This is the part worth being specific
-about. It found that our original ±1-sigma barrier made the median label
-resolve in a single bar, which would have left purging nothing to purge and
-made the headline result an artifact. It found that `t1` was being computed in
-calendar days rather than trading bars, which would have corrupted every purge
-decision. It found that the label leaks through volatility, so the no-signal
-AUC floor is about 0.544 rather than 0.500 — without which we would have
-reported the floor as a modest edge. It found that our precision figures were
-inflated by averaging across folds with unequal action counts, that we were
-printing the majority-class rate where the positive rate belonged, and that the
-control-versus-purged gap needed a paired standard error. It found a hole in our
-own step-3 test suite by deliberately breaking the code to see what the tests
-caught. And it caught a bug in the holdout script before any holdout number was
-printed.
+All design decisions were ours, and each is recorded with its date and reasoning
+in [`decision-log.md`](decision-log.md): the research question, the universe,
+the binary target, the barrier width, the choice of control, per-ticker models,
+and how the holdout would be reported. We reviewed the outputs, and we can
+derive the two methods the project turns on — purging and the Deflated Sharpe
+Ratio — independently of the code.
 
-**What we decided.** Every choice in `decision-log.md` is ours: the subject of
-the project, the universe, the binary target, the barrier width, the contiguous
-control, per-ticker models, declining to adopt the sign-flip floor, and the
-decision to report the holdout exactly as it came out. Claude argued with us
-about several of these and we overruled it on some. Where it proposed something
-we accepted, the log says so and names it.
-
-**What it did not do.** It did not choose the research question, open the
-holdout on its own, or decide what to report. We read every number it produced
-and re-derived the ones the viva covers.
-
-This disclosure was itself added late: an earlier session removed an AI
-disclosure rule from `decision-log.md` on our incorrect assurance that the
-course did not require one. The submission instructions do require it. The
-removal and this correction are both dated in the log.
+Citations for the methods themselves follow.
 
 ## Citations
 

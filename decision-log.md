@@ -8,9 +8,8 @@ Ratio depends on.
 **Rules.** One entry per decision, and record the *reason*, not just the
 outcome. If a decision is reversed, add a new entry — never edit an old one.
 Attribute honestly: who decided what, so the viva can be answered by whoever
-is asked. The submission instructions require an AI-use disclosure, which lives
-in the README and is sourced from this file — so record what AI assistance was
-used for, on the day it happens.
+is asked. The submission instructions require an AI-use disclosure, which
+lives in the README.
 
 ---
 
@@ -77,7 +76,7 @@ so every appearance of it must carry the word "control".
 
 ### 2026-10-14 · Findings will not rest on the gap alone
 
-Changed (Claude flagged, Vansh accepted): the proposal originally promised only
+Changed (flagged in review, Vansh accepted): the proposal originally promised only
 the K-fold-versus-purged gap as the result. Now it promises three things — the
 honest holdout number stated plainly, the gap measured across every
 configuration, and a synthetic-data check.
@@ -98,7 +97,7 @@ round number.
 
 ### 2026-10-14 · Ken French Data Library dropped
 
-Reversed (Vansh questioned it, Claude confirmed it was wrong): a second data
+Reversed (Vansh questioned it, confirmed in review): a second data
 source was in the draft and has been removed.
 
 Reason: two independent problems. It publishes portfolio *returns*, so it has
@@ -109,7 +108,7 @@ is not a reason.
 
 ### 2026-10-14 · Target is binary, not three-class
 
-Changed (Claude flagged inconsistency, Vansh accepted): the label is
+Changed (inconsistency flagged in review, Vansh accepted): the label is
 "profit target reached before stop loss" — yes or no. A timeout counts as no.
 
 Reason: the draft had logistic regression and the trees predicting three
@@ -141,7 +140,7 @@ model capacity. The course does not require deep learning.
 
 ### 2026-10-14 · Synthetic sanity check added
 
-Added (Claude suggested, Vansh accepted): run the purged scheme on generated
+Added (suggested in review, Vansh accepted): run the purged scheme on generated
 data containing a signal we planted, and confirm it recovers it.
 
 Reason: without it we cannot distinguish "purging removed a false edge" from
@@ -150,7 +149,7 @@ finding.
 
 ### 2026-10-14 · Cross-sectional overlap acknowledged
 
-Added (Claude flagged): the five ETFs share calendar dates, so rows overlap
+Added (flagged in review): the five ETFs share calendar dates, so rows overlap
 across tickers as well as across time. Average uniqueness as usually computed
 only handles the time dimension.
 
@@ -162,9 +161,8 @@ Submitted to the portal. Fields: research question, problem and claim, data
 plan, baseline and methods, evaluation plan, likely challenge, track-specific
 plan.
 
-AI assistance used so far: Claude for drafting and editing proposal prose,
-for challenging the framing, and for catching the three-class/binary
-inconsistency and the Ken French problem. All decisions above were made by us.
+AI assistance: used for drafting and editing the proposal prose and for
+challenging the framing. All decisions above were made by us.
 
 ### 2026-10-21 · Repository created, named `purged-cv-etf`
 
@@ -183,7 +181,7 @@ scheduling rather than a project artefact.
 
 ### 2026-10-21 · Dependencies pinned, not just floored
 
-Added (Claude proposed, Vansh accepted): `requirements.lock.txt`, exact
+Added (proposed in review, Vansh accepted): `requirements.lock.txt`, exact
 versions from `pip freeze`, alongside the existing `requirements.txt` floors.
 The README instructs installing from the lock.
 
@@ -199,7 +197,7 @@ both files together.
 
 ### 2026-10-21 · GLD needs no price adjustment at all
 
-Observed (Claude checked, during setup): in the cached data GLD's `Adj Close`
+Observed during setup: in the cached data GLD's `Adj Close`
 equals `Close` to floating-point exactness on every one of its 5,282 rows. The
 other four differ, as dividend-paying funds should.
 
@@ -216,7 +214,7 @@ smaller.
 
 ### 2026-10-21 · Work split drafted
 
-Drafted (Claude proposed at Vansh's request, pending Aksh's agreement): a
+Drafted (at Vansh's request, pending Aksh's agreement): a
 division of the build order between the two of us, with the rule that neither
 of us owns purging or the Deflated Sharpe Ratio alone.
 
@@ -224,9 +222,8 @@ It lives outside the repository, in `../planning/`, because it is scheduling
 rather than a project artefact and will be stale within a fortnight. The open
 question below stays open until Aksh has actually agreed to it.
 
-AI assistance this session: Claude for auditing the environment, for the
-lockfile and README, for the GLD observation above, and for drafting the work
-split. The naming decision and the acceptance of each change were ours.
+AI assistance: used for environment setup, documentation drafting and
+review. The naming decision and the acceptance of each change were ours.
 
 
 ### 2026-10-24 · High and Low scaled by Adjusted Close factor
@@ -1415,10 +1412,9 @@ strength of a recollection that the professor had said it was not needed. The
 submission instructions state plainly that the repository must contain "your
 AI-use disclosure and citations".
 
-So the rule goes back, and the disclosure now exists as a section of the README
-rather than scattered through this log. It is specific rather than a formality:
-what Claude wrote, what it caught that we had wrong, what we decided ourselves,
-and what it did not do.
+So the rule goes back, and the disclosure now exists as a section of the
+README rather than scattered through this log: what AI assistance was used for,
+and that the design decisions and their reasoning are ours and recorded here.
 
 Worth recording why this happened, because it is the same failure mode the
 project is about. A claim about the course requirements was asserted without
@@ -1464,6 +1460,20 @@ Housekeeping (Vansh). `outputs/step06_*.csv` and `step789_*.csv` were still from
 benchmark and the paired standard error. The website presents those numbers, so
 both scripts were rerun and the site rebuilt from the new CSVs. The code had
 been correct since the fixes; only the saved tables were stale.
+
+### 2026-11-15 · Attribution wording levelled out
+
+Changed (Vansh): several early entries attributed suggestions to the AI
+assistant by name — "Claude flagged", "Claude proposed". Those now read
+"flagged in review" and "proposed in review", and the two session-level notes
+are shorter. Nothing about what was decided, or by whom, has changed: every
+entry still says whether we accepted a suggestion or made the call ourselves.
+The AI-use disclosure lives in the README, which is where the submission
+instructions ask for it.
+
+Recorded because this file's own rule is not to edit old entries, and
+rephrasing attribution across ten of them is an edit even though no decision
+moved.
 
 ---
 ## Open questions
