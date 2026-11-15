@@ -148,7 +148,7 @@ class MetaLabel(BaseEstimator, ClassifierMixin):
 def model_zoo(seed):
     """The five models of project_details.md, simplest first.
 
-    No hyperparameter search. The effective sample is roughly 700 observations
+    No hyperparameter search. The effective sample is roughly 660 observations
     per ticker, a grid would multiply the trial counter the Deflated Sharpe
     Ratio depends on, and the 2026-11-10 scope decision says one number per
     question. The settings below are fixed, deliberately conservative, and
@@ -162,7 +162,7 @@ def model_zoo(seed):
             LogisticRegression(max_iter=1000, random_state=seed)
         ),
         "gbt": make_pipeline(HistGradientBoostingClassifier(
-            # Capacity held down on purpose: ~700 effective observations is the
+            # Capacity held down on purpose: ~660 effective observations is the
             # binding constraint, not model class. Shallow trees, a big leaf
             # floor and explicit L2 are all the same decision.
             max_leaf_nodes=7,
