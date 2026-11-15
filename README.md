@@ -137,7 +137,24 @@ It writes `outputs/step789_backtest.csv` and `outputs/step789_equity.csv`.
 Read every Sharpe against its own standard error, which is about 0.24 on this
 much data — wide enough that only buy-and-hold is distinguishable from zero.
 
-Steps 1 to 10 are done. Remaining build order is step-by-step in
+Steps 1 to 10 are done. Then the two reporting items that the other scripts cannot stand in for:
+
+```powershell
+python scripts/run_embargo_sweep.py   # the gap as a RANGE, 0-20 bars
+python scripts/find_errors.py         # representative errors, with dates
+```
+
+`run_embargo_sweep.py` closes reporting item 2 — the spec asks for the
+control-to-purged gap "reported as a range rather than a single number", and
+until the sweep existed there was only one embargo setting. It also writes
+`outputs/positions_<ticker>.csv`, which is the position series step 11 needs:
+shipping positions rather than equity curves lets the browser apply cost and
+execution lag arithmetically, per the 2026-10-14 decision.
+
+`find_errors.py` closes reporting item 4. A gap number contains no errors in
+it, so this is the only output that can satisfy it.
+
+Remaining build order is step-by-step in
 [`project_details.md`](project_details.md#build-order): the precomputed grid
 (11), the site (12), opening the holdout (13) and the write-up (14).
 
