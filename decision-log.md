@@ -27,7 +27,7 @@ Update this block whenever an entry below changes it.
 | Target | Binary: profit target reached before stop loss | 2026-10-14 |
 | Horizon | 10 trading days | 2026-10-14 |
 | Barrier width | ±2.5 × 20-day realized volatility, in log space | 2026-11-01 |
-| Holdout | 2023-01-01 to 2025-12-31, UNOPENED | 2026-10-14 |
+| Holdout | 2023-01-01 to 2025-12-31, **OPENED 2026-11-15** | 2026-11-15 |
 | Primary CV | Purged 5-fold, embargo ≈1% of sample | 2026-10-14 |
 | Control CV | Standard 5-fold K-fold | 2026-10-14 |
 | Third scheme | Walk-forward, expanding window | 2026-10-14 |
@@ -1308,6 +1308,102 @@ stack choice -- plain HTML, no framework, no charting library -- is therefore
 mine rather than his, and it is deliberately the easiest possible thing to
 replace: one file, no build step. If Aksh wants a framework the data contract
 does not change, and `check_site_data.py` will keep whatever replaces it honest.
+
+### 2026-11-15 · STEP 13: THE HOLDOUT IS OPEN. This is the result.
+
+Opened (Vansh and Aksh, both present, once) by `scripts/open_holdout.py`.
+2023-01-01 to 2025-12-31, declared in `config.yaml` on 2026-10-14 before any
+modelling. Each model fitted a single time on the purged pre-holdout rows --
+about 4,300 per ticker -- and predicted roughly 744 holdout bars. Nothing was
+tuned, selected or retried. Written down here before being discussed, per the
+working agreement.
+
+**Classification, averaged over the five ETFs:**
+
+| model | AUC | vs floor | precision | positive rate | coverage |
+| --- | --- | --- | --- | --- | --- |
+| buy_and_hold | 0.5000 | -0.044 | 0.437 | 0.437 | 1.000 |
+| ma_crossover | 0.5014 | -0.043 | 0.438 | 0.437 | 0.675 |
+| logistic | **0.5754** | +0.031 | 0.503 | 0.437 | 0.043 |
+| gbt | 0.5318 | -0.012 | 0.481 | 0.437 | 0.190 |
+| meta_crossover_logistic | 0.5392 | -0.005 | 0.508 | 0.437 | 0.132 |
+
+**Strategy at 0 bps:**
+
+| model | Sharpe | s.e. | t | max DD | turnover | exposure | total |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| buy_and_hold | **1.116** | 0.580 | 1.92 | 0.206 | 0.5 | 1.00 | +81% |
+| ma_crossover | 0.948 | 0.580 | 1.63 | 0.135 | 4.6 | 0.72 | +47% |
+| logistic | 0.579 | 0.580 | 1.00 | 0.104 | 7.7 | 0.12 | +15% |
+| gbt | 1.048 | 0.580 | 1.81 | 0.102 | 18.6 | 0.42 | +43% |
+| meta_crossover_logistic | 0.695 | 0.580 | 1.20 | 0.079 | 8.2 | 0.23 | +20% |
+
+At 10 bps: buy-and-hold 1.113, trees 0.879, logistic 0.470.
+
+**Deflated, and exposure-matched, at 0 bps:**
+
+| model | Sharpe | matched benchmark | selection edge | t (n=5) | DSR |
+| --- | --- | --- | --- | --- | --- |
+| buy_and_hold | 1.116 | 1.122 | -0.006 | -0.6 | 0.817 |
+| ma_crossover | 0.948 | 0.975 | -0.028 | -0.3 | 0.792 |
+| logistic | 0.579 | 0.400 | +0.179 | 1.1 | 0.631 |
+| gbt | 1.048 | 0.756 | **+0.292** | 3.4 | 0.860 |
+| meta_crossover_logistic | 0.695 | 0.576 | +0.120 | 0.7 | 0.674 |
+
+---
+
+**What it says.**
+
+**1. The AUC held, to a degree nobody expected.** Logistic scored 0.5755
+under the purged scheme pre-holdout and **0.5754** on the holdout -- a
+difference of one ten-thousandth, on data from three years nobody had looked
+at. Every model held within 0.024. Whatever the pipeline was measuring, it was
+measuring it stably, and the purged estimate was an honest predictor of
+out-of-sample performance. That is the single best piece of evidence that the
+evaluation machinery works, and it is what the whole project was built to
+establish.
+
+**2. Buy-and-hold still wins, and by more than before.** Its Sharpe went from
+0.480 to 1.116. That is not skill appearing, it is the market: SPY +88%,
+QQQ +138%, GLD +133%, IWM +49%, TLT -3% over the period. Every strategy's
+Sharpe roughly doubled for the same reason. No model beat the index, which is
+the same conclusion as pre-holdout.
+
+**3. Nothing is statistically distinguishable.** The Sharpe standard error is
+**0.580**, against 0.242 pre-holdout, because the holdout is 744 bars rather
+than 4,300. Not one model reaches t = 2. The holdout is too short to resolve
+any of this, which was knowable in advance from the sample-size arithmetic and
+is a limitation of the design rather than a surprise.
+
+**4. The selection edge flipped sign, which tells us it was noise.** Logistic's
+edge was **-0.164** pre-holdout at t = -2.36, the one result that cleared two
+standard errors, and we wrote that it was "genuinely, measurably picking bad
+days". On the holdout the same model's edge is **+0.179**. A quantity that
+reverses sign out of sample was noise, and the pre-holdout significance was a
+false positive -- exactly the kind this project exists to warn about. It is
+uncomfortable that we found it in our own strongest negative claim, and it goes
+in the write-up for that reason.
+
+**5. The trees' +0.292 edge at t = 3.4 is not a discovery, and we are not
+reporting it as one.** It is one number among about sixty in this table, drawn
+from five tickers with four degrees of freedom, and its pre-holdout value was
++0.071 at t = 1.37 -- it quadrupled, which is what noise does. The Deflated
+Sharpe Ratio exists precisely to price this kind of thing and puts the trees at
+**0.860**, short of any convincing bar. Reporting it as skill would be the
+error the entire project is about. If anything it is a useful closing
+illustration: even after all this machinery, the single most impressive-looking
+number in the final table is one we have to decline.
+
+**Honest summary for the write-up.** The purged estimate predicted
+out-of-sample AUC almost exactly. The strategies' profitability was dominated
+by a strong bull market. No model beat buying the index, nothing survives a
+multiple-testing correction, and our one significant pre-holdout finding
+reversed. The project's claim is about the measurement machinery, and the
+machinery was vindicated; the models were not.
+
+**The holdout is now closed permanently.** Nothing upstream of this entry may
+be changed on the strength of it. No barrier width, feature, model setting,
+embargo or threshold moves from here.
 
 ---
 ## Open questions
