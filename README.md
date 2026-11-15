@@ -115,6 +115,15 @@ seeds. Exits non-zero if any of its three checks fail. It also reports the
 not against 0.500, because the label leaks through volatility. See
 decision-log.md, 2026-11-10.
 
+```powershell
+python scripts/check_floor_real.py
+```
+
+measures that same floor on real bars instead of synthetic ones, by
+randomising the sign of each daily return — which keeps the volatility path
+and destroys direction. It prints the comparison and changes nothing; whether
+to adopt it is an open question.
+
 Then the model comparison:
 
 ```powershell
@@ -154,6 +163,31 @@ execution lag arithmetically, per the 2026-10-14 decision.
 `find_errors.py` closes reporting item 4. A gap number contains no errors in
 it, so this is the only output that can satisfy it.
 
+Then the site (steps 11 and 12):
+
+```powershell
+python scripts/build_site_data.py    # the precomputed grid -> site/data.json
+python scripts/check_site_data.py    # does the browser agree with the modules?
+cd site; python -m http.server 8000  # then open http://localhost:8000
+```
+
+A local server is needed because browsers block `fetch` from `file://`. The
+page says so if you open it directly.
+
+`build_site_data.py` ships the position series rather than equity curves, one
+per scheme and embargo, run-length encoded. Crossing all four controls would be
+1,764 equity curves and hundreds of megabytes; this is 475 KB, and cost and
+execution lag are applied arithmetically in the browser. That was decided on
+2026-10-14 and the file is the evidence it was the right call.
+
+`check_site_data.py` is the guard that matters. The site re-implements the
+backtest in JavaScript, so the same arithmetic now exists twice in two
+languages. That script ports the JavaScript back into Python, runs it against
+`site/data.json`, and compares with `src/backtest.py` and `src/metrics.py`
+computed from scratch. It exits non-zero on any disagreement, and it also
+checks that the run-length encoding round-trips and that no holdout bar is in
+the file. Run it after anything upstream changes.
+
 Remaining build order is step-by-step in
 [`project_details.md`](project_details.md#build-order): the precomputed grid
 (11), the site (12), opening the holdout (13) and the write-up (14).
@@ -181,6 +215,8 @@ requirements.txt       dependency floors
 requirements.lock.txt  exact pins — install from this one
 data/raw/              cached OHLCV, committed, never re-downloaded
 scripts/               one-off utilities; download_data.py lives here
+site/                  the control panel: index.html plus its precomputed data
+outputs/               generated tables and position series; gitignored
 ```
 
 ## A note on the trial counter

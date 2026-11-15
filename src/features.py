@@ -111,7 +111,7 @@ def make_pipeline(model):
     changes it is noticed rather than absorbed.
 
     No feature selection. Ten features against an effective sample of roughly
-    700 does not need it, and a selector is one more thing to fit in-fold and
+    660 does not need it, and a selector is one more thing to fit in-fold and
     one more configuration to count.
     """
     return Pipeline([

@@ -1206,6 +1206,109 @@ setting. We report the range and do not pick from it. If an embargo is ever
 selected on these numbers the counter moves by 21, and that would need to be
 recorded here on the day it happens.
 
+### 2026-11-15 · Effective sample size corrected: 662, not 690
+
+Corrected (Vansh). The 2026-11-01 barrier-width entry quotes effective sample
+sizes of 1558, 690 and 579 for barrier multiples of 1.0, 2.5 and sqrt(10).
+Those came from throwaway code written before `src/uniqueness.py` existed, and
+they also used a plain date filter on the holdout rather than
+`purged_holdout_mask`. Recomputed with the tested module:
+
+| barrier mult | label 1 | avg uniqueness | effective N | previously logged |
+| --- | --- | --- | --- | --- |
+| 1.0 | 0.534 | 0.3654 | 1575 | 1558 |
+| 2.5 | 0.405 | 0.1539 | **662** | 690 |
+| 3.162 | 0.304 | 0.1256 | 540 | 579 |
+
+The decision does not change -- 2.5 still keeps about 23% more effective sample
+than sqrt(10), which was the argument -- but the write-up quotes these numbers
+and the log's own rule from 2026-11-03 is that a figure which cannot be
+reproduced is worse in a write-up than in a pull request. `src/models.py` and
+`src/features.py` said "roughly 700" and now say "roughly 660".
+
+Per the never-edit rule the old entry stands; this is the correction.
+
+### 2026-11-15 · Steps 11 and 12: the site, and the guard that keeps it honest
+
+Added (Vansh, taking a step the work split assigns to Aksh -- see the caveat at
+the end): `scripts/build_site_data.py`, `site/index.html`,
+`scripts/check_site_data.py`.
+
+**What is precomputed.** Only the position series, one per scheme and embargo,
+plus each ticker's daily returns. The browser multiplies them together and
+applies cost and execution lag on top. Crossing all four controls is
+2 x 21 x 21 x 2 = 1,764 combinations, and a full equity curve for each is
+hundreds of megabytes; that was decided against on 2026-10-14 and this is the
+decision carried out.
+
+**Run-length encoding, which made it small enough to stop worrying about.** A
+position series is 4,312 bars but it is blocky, because a position is held for
+about six bars. The median series has 117 runs instead of 4,312 bars, a 37-fold
+reduction on the position data. The whole grid is **475 KB** -- 575 series
+across five tickers, five models and 23 scheme/embargo combinations.
+
+Two size decisions worth recording. The five ETFs share one NYSE calendar and
+the labelled frames come out the same length, so the date axis is stored once
+rather than five times; that alone was 220 KB of the first version, spent on
+four exact copies. And returns are rounded to six decimal places, which is far
+inside what any chart or statistic needs.
+
+**The site labels the control as a control.** Selecting standard K-fold
+replaces the status banner with a warning that it is wrong for this data and
+run deliberately. That is the 2026-10-14 requirement that the control must
+never read as an honest result, and a web page is the easiest place to break
+it. The embargo slider disables itself for the control and for walk-forward,
+because neither has an embargo -- the control by definition, walk-forward
+because an expanding window has no training row after its test block.
+
+**No charting library.** The equity curve is drawn on a canvas in about sixty
+lines. A CDN dependency that fails during a viva is a worse outcome than
+hand-rolled axes, and the page has no build step, no framework and no network
+dependency at all beyond its own data file.
+
+**"One bar late" is not a next-open fill, and the page says so.** The spec says
+"same-bar or next-open". An honest open fill needs open-to-close returns
+threaded through the entry bar, which cannot be done as arithmetic on a
+position series, and doing it properly would mean precomputing a second return
+series for every configuration. A one-bar execution delay is the standard
+vectorised treatment and it is a real cost of being late, but it is not the
+same thing, so the page states the difference rather than overclaiming.
+
+**The guard.** Putting the backtest in JavaScript means the same arithmetic now
+exists twice, in two languages, with nothing stopping the two from drifting.
+`scripts/check_site_data.py` ports the JavaScript back into Python, runs it
+against `site/data.json`, and compares against `src/backtest.py` and
+`src/metrics.py` computed from scratch -- five tickers, two models, four
+schemes, two cost levels. It also checks that the encoding round-trips, that
+every series the interface can request exists, and that no bar on or after
+2023-01-01 is in the file. It passes, with the largest disagreement at 2e-06,
+which is the six-decimal rounding. It exits non-zero on any mismatch.
+
+That script is the part of step 11 the work split actually assigns to me --
+"Vansh reviews the data contract" -- and a review that is a script rather than a
+reading is one that still works in a fortnight.
+
+**`site/data.json` is committed.** The gitignore says the precomputed grid gets
+committed deliberately when it is final rather than incidentally while
+iterating. It is not final -- the floor question is open -- but without it the
+site cannot be demonstrated from a clone, and 475 KB is not worth the
+inconvenience. Regenerable with one command, and `check_site_data.py` will fail
+loudly if it ever goes stale against the modules.
+
+**One curiosity worth a sentence in the write-up.** Logistic's Sharpe
+*improves* when execution is delayed by a bar, from about -0.04 to +0.17 at
+10 bps on SPY. A signal that does better when you act on it late is a signal
+that is anti-predictive at the one-day horizon, which is the same thing the
+negative selection edge said on 2026-11-14 from a different direction.
+
+**Caveat on who did this.** The work split assigns steps 11 and 12 to Aksh, and
+the open questions reserved the site stack for him specifically because he was
+building it. I built it at Vansh's instruction while Aksh was unavailable. The
+stack choice -- plain HTML, no framework, no charting library -- is therefore
+mine rather than his, and it is deliberately the easiest possible thing to
+replace: one file, no build step. If Aksh wants a framework the data contract
+does not change, and `check_site_data.py` will keep whatever replaces it honest.
+
 ---
 ## Open questions
 
