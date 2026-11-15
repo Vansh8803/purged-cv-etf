@@ -1050,6 +1050,162 @@ is a defensible approximation and a conservative one, since the spread is wider
 than a true zero-skill distribution would be, which raises the benchmark and
 lowers every DSR. Worth one sentence rather than a rework.
 
+### 2026-11-15 · Representative errors: the models fail in crises, by construction
+
+Added (Vansh): `scripts/find_errors.py`, writing
+`outputs/representative_errors.csv`. This closes reporting item 4, which
+nothing else could stand in for -- a gap number contains no errors in it.
+
+An error is a day the model said act and the lower barrier fell first,
+out-of-fold under the purged scheme, so every one is a day the model had
+genuinely not been trained on.
+
+**How often each model is wrong when it acts**, against the only honest
+baseline, which is acting every single day:
+
+| model | days acted | wrong | error rate | if always acting | better by |
+| --- | --- | --- | --- | --- | --- |
+| logistic | 2,370 | 1,260 | 0.532 | 0.595 | +0.063 |
+| gbt | 5,640 | 3,132 | 0.555 | 0.595 | +0.040 |
+| meta_crossover_logistic | 2,947 | 1,511 | 0.513 | 0.595 | **+0.082** |
+
+Meta-labelling is again the best of the three, which is the third instrument
+to say so after precision at step 6 and the selection edge at step 7-9. It is
+still not significant, and the write-up should say all three agree and that
+none of them clears a bar.
+
+**The costliest errors are all the same two weeks.** The five worst days for
+each model are October and November 2008, January 2009, and March 2020 --
+the financial crisis and the Covid crash, and mostly IWM, the small-cap fund
+with the widest swings. The single worst is a logistic signal on IWM for
+2020-03-09 that lost 14.1% in three bars. Confidence on these was ordinary,
+between 0.52 and 0.70: the model was not unusually sure, it was ordinarily
+sure and catastrophically wrong.
+
+**Errors concentrate where the barriers are widest.** Error rate by quintile
+of trailing volatility on the day:
+
+| volatility | logistic | gbt | meta |
+| --- | --- | --- | --- |
+| lowest | 0.481 | 0.495 | 0.497 |
+| low | 0.486 | 0.490 | 0.449 |
+| mid | 0.567 | 0.548 | 0.554 |
+| high | 0.526 | 0.589 | 0.511 |
+| highest | **0.641** | **0.602** | **0.622** |
+
+This is not a coincidence and it is the most useful thing in the analysis. It
+is the volatility channel from step 10 showing its other face. High volatility
+means wide barriers, which means the label is more likely to time out, which
+counts as 0 -- so the conditions in which the model is most likely to be wrong
+are exactly the conditions its edge is built on. The edge and the failures have
+the same cause. A model leaning on volatility to predict timeouts will act
+confidently in precisely the regimes where a real move can blow through a wide
+barrier in either direction.
+
+By year, the pattern is the same: 2008 is the worst year for every model
+(logistic 0.770), followed by 2009, 2022 and 2016. Distance from the 200-day
+average gives a U shape -- errors are highest at both extremes, in strong
+downtrends and strong uptrends, and lowest in the middle.
+
+**What this means for the write-up.** The honest sentence is that these models
+are least reliable exactly when it matters most, that this follows from the
+label's construction rather than from a bug, and that it would be caught by any
+practitioner before deployment. It also makes the case for the barrier width
+being the project's most consequential single choice, which is where this all
+started on 2026-11-01.
+
+### 2026-11-15 · The embargo sweep: the gap is measurable, negligible, and not even sign-stable
+
+Added (Vansh): `scripts/run_embargo_sweep.py`, writing
+`outputs/embargo_sweep.csv` and `outputs/positions_<ticker>.csv`. This closes
+reporting item 2, which asks for the gap "computed for every configuration,
+reported as a range rather than a single number". Until now it existed at one
+embargo setting, which is a single number -- the thing the spec says not to
+report.
+
+Every embargo from 0 to 20 bars, five models, five tickers, five folds, paired
+against the control fold for fold. The embargo is swept on the purged scheme
+only: the control has no embargo by definition, and walk-forward's is a
+structural no-op already proven in the test suite.
+
+**The gap as a range.** Units are AUC x 1000 throughout, because in AUC itself
+every number is zeroes:
+
+| model | min | max | spread | pooled mean | s.e. | t |
+| --- | --- | --- | --- | --- | --- | --- |
+| buy_and_hold | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | - |
+| ma_crossover | 0.00 | 0.00 | 0.00 | 0.00 | 0.00 | - |
+| logistic | -0.70 | -0.13 | 0.57 | -0.39 | 0.16 | -2.4 |
+| gbt | -2.55 | +0.55 | 3.10 | -1.27 | 0.32 | -4.0 |
+| meta_crossover_logistic | -0.18 | -0.03 | 0.15 | -0.11 | 0.06 | -1.8 |
+
+The two rules come out at exactly zero, as they must: a rule is not fitted, so
+it cannot be affected by which rows were withheld from training. That is a
+useful check that the sweep is wired up correctly rather than a finding.
+
+**Three things to say about this, and the third is the interesting one.**
+
+*It is measurable.* Pool enough folds and the gap clears two standard errors.
+With 525 paired differences per model you can detect almost anything.
+
+*It is negligible.* The largest gap anywhere is about 1.3 thousandths of an AUC
+point, against a purged AUC of 0.539 and a single fold's standard error of
+about 17 thousandths. The effect is roughly forty times smaller than the noise
+on one fold of the measurement it is drawn from. Statistically present,
+practically absent -- which is a distinction worth making explicitly in the
+write-up, because "significant" and "meaningful" are being used as synonyms by
+everyone who quotes a p-value at a large sample.
+
+*It is not sign-stable.* The gap's direction changes from ticker to ticker:
+
+| ticker | logistic | gbt | meta |
+| --- | --- | --- | --- |
+| SPY | -2.61 | -2.36 | -1.01 |
+| QQQ | +0.97 | -1.45 | -0.25 |
+| IWM | -0.88 | -0.09 | +0.09 |
+| TLT | +0.55 | +0.15 | +0.67 |
+| GLD | +0.01 | -2.58 | -0.07 |
+
+Three of logistic's five tickers go one way and two the other. This also
+explains an apparent conflict with the step 6 table, which reported the gap as
+**+0.0003** for logistic at the config embargo of 43 bars while the sweep comes
+out slightly negative over 0 to 20. Both are right. The two scoring paths agree
+to six decimals -- checked -- and the difference is simply that a quantity this
+small wanders across embargo values and across tickers. **The sign of the gap
+is not determined by our data**, and no version of this result should be quoted
+as though it were.
+
+**Also worth recording: the pooled sign is negative, meaning purging very
+slightly *improves* AUC.** That is the opposite of the naive story, in which
+leakage inflates the control. A hypothesis rather than a finding: with
+contiguous folds the rows purged are the ones whose label windows straddle a
+fold boundary, and a row needs an unusually long window to reach into the test
+fold, so the purge disproportionately removes long-window timeout rows. Taking
+a biased subset out of training may help more than the 0.33% of leaked rows
+hurt. We are not claiming this, and it is far too small to matter either way.
+
+**The purged AUC barely moves across the sweep.** Logistic reads 0.5763 at
+embargo 0 and 0.5764 at embargo 20, wandering by less than a thousandth in
+between. Withholding twenty extra bars after every test fold costs nothing
+measurable, which is the sensitivity analysis the proposal promised and the
+answer is that the result is insensitive.
+
+**The position series for step 11 came free.** One fitting pass yields both the
+AUC and the position series, so `outputs/positions_<ticker>.csv` now holds
+4,312 bars by 115 columns -- five models by (control, walk-forward, and purged
+at each of 21 embargos), strictly 0 or 1, named like
+`logistic|purged_kfold|12`. Shipping positions rather than equity curves is the
+2026-10-14 decision: cost and execution lag are arithmetic the browser can do.
+The date range stops at 2022-12-30, so the holdout is untouched. Note for step
+11: the two rules have 21 identical columns each, since a rule does not change
+with the embargo, and they can be collapsed.
+
+**Trial counter: unchanged, at 5.** A sensitivity sweep over one parameter is a
+measurement of one configuration's stability, not a search for the best
+setting. We report the range and do not pick from it. If an embargo is ever
+selected on these numbers the counter moves by 21, and that would need to be
+recorded here on the day it happens.
+
 ---
 ## Open questions
 
