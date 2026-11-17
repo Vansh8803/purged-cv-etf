@@ -1,3 +1,5 @@
+from pathlib import Path
+
 import numpy as np
 import pandas as pd
 import pytest
@@ -8,6 +10,8 @@ from src.evaluate import cross_val_scores, summarise
 from src.features import design_matrix, make_pipeline
 from src.purging import embargo_bars
 from src.synthetic import synthetic_dataset, synthetic_ohlc
+
+ROOT = Path(__file__).resolve().parents[1]
 
 RETURNS = ["ret_1d", "ret_5d", "ret_10d", "ret_20d"]
 N_BARS = 1400
@@ -99,8 +103,9 @@ def test_sign_flip_preserves_the_real_volatility_path():
     # perturbation matters relatively more and the correlation is only ~0.96.
     from src.synthetic import sign_flipped_ohlc
 
-    raw = pd.read_csv('data/raw/SPY_2005-01-01_2025-12-31_dl2026-10-16.csv',
-                      index_col='Date', parse_dates=True)
+    raw = pd.read_csv(
+        ROOT / 'data/raw/SPY_2005-01-01_2025-12-31_dl2026-10-16.csv',
+        index_col='Date', parse_dates=True)
     flipped = sign_flipped_ohlc(raw, seed=1)
 
     r = np.log(raw["Adj Close"] / raw["Adj Close"].shift(1)).dropna()

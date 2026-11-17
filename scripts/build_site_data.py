@@ -119,6 +119,19 @@ def main() -> int:
         print(f"  {ticker}: {len(pos)} bars, {len(pos.columns)} series")
 
     path = OUT / "data.json"
+    # Keep any findings already in the file. This script rebuilds the position
+    # series; scripts/build_site_findings.py writes the results tables beside
+    # them. Without this, rebuilding one wipes the other and every table on the
+    # site goes blank until the second script happens to be run again.
+    if path.exists():
+        try:
+            existing = json.loads(path.read_text(encoding="utf-8"))
+        except json.JSONDecodeError:
+            existing = {}
+        if "findings" in existing:
+            payload["findings"] = existing["findings"]
+            print(f"  kept {len(existing['findings'])} existing findings sections")
+
     path.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
 
     runs = [len(r) for t in payload["tickers"].values()

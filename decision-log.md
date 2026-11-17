@@ -1552,6 +1552,75 @@ runs and ignores the AUC's own fold-to-fold error. Read loosely, none of these
 lifts is convincingly significant, which is consistent with everything else we
 have found.
 
+### 2026-11-17 · An outside review found four bugs. Three were real
+
+Vansh had another model review the repository. It reported four bugs. We
+checked each against the code rather than taking them on trust, and fixed the
+three that held up.
+
+**Real: `tests/test_synthetic.py` assumed the working directory.** Line 102
+read `data/raw/SPY_...csv` as a bare relative path while every other test
+resolves from `ROOT`. Running `pytest` from the parent folder failed with a
+`FileNotFoundError`. Our own inconsistency, and a grader running pytest from
+anywhere but the repository root would have hit it. Fixed; 161 tests now pass
+from either directory.
+
+**Real, and worse than reported: `build_site_data.py` wiped the results
+tables.** It rebuilds `docs/data.json` from scratch, so running it discarded
+all 16 `findings` sections that `build_site_findings.py` writes. Confirmed by
+running it and counting the keys: 16 before, none after.
+
+The review said this leaves the tables blank. It is worse than that. The page
+calls `table("t-data", ...)` without checking the section exists, so a missing
+`findings` block throws inside `renderTables`, the exception escapes into the
+`fetch` chain, and the catch handler replaces the whole page with the "could
+not load data.json" error. The interactive panels would have gone too.
+
+Fixed on both sides: `build_site_data.py` now carries any existing findings
+over, and every table on the page is guarded so a section that has not been
+generated leaves one table hidden rather than taking the page down.
+
+**Real, with a fix we did not take: a fresh clone crashed with a traceback.**
+`data/processed/` is gitignored because it is regenerable, so
+`check_site_data.py` on a fresh clone died inside pandas with a
+`FileNotFoundError`. The review suggested running `data_process.py` and
+`build_labels.py` automatically through `subprocess`. We did not: a script
+whose job is to verify the data should not silently regenerate it. It now
+checks first and prints the two commands to run.
+
+**Overstated: the GBT position mismatch.** The review reported
+`check_site_data.py` failing on `GLD/gbt` at embargo 0 and 20, blaming
+predicted probabilities "around 0.499 to 0.519" being flipped by
+floating-point differences across scikit-learn builds. The upper figure is
+wrong -- 0.519 is nowhere near the 0.5 boundary and no rounding difference
+moves it. Measured on GLD, 14 of 4,303 predictions sit within 1e-3 of the
+boundary and 2 within 1e-4.
+
+But the conclusion survives the bad arithmetic. `HistGradientBoosting` sums
+leaf values in an order that depends on the OpenMP thread count, so a
+prediction that close to the boundary can genuinely land on either side on
+another machine, and each flip moves about six bars of the position series.
+Fourteen borderline predictions is more than enough to produce the ~56
+differing bars they saw. The check passes on our machine and we could not
+reproduce the failure, which is exactly what an environment-dependent bug
+looks like.
+
+We did not take the suggested fix either, which was to allow a 2% mismatch
+everywhere. That is 86 bars of slack applied to models where any difference at
+all is a bug. Instead the check now splits by whether a model is fitted:
+
+- `buy_and_hold` and `ma_crossover` are not fitted, so any difference remains a
+  hard failure.
+- The three learned models may differ on up to 1% of bars, which is reported as
+  drift rather than failure -- and the statistics still have to agree to 1e-4,
+  so anything that actually changed the result still fails.
+
+Checked that this still catches a real break: corrupting `GLD/gbt` by 8% of
+bars fails as it should.
+
+The review's second recommendation, that `docs/data.json` stay committed with
+all 16 findings keys, follows from the second fix and now holds.
+
 ---
 ## Open questions
 

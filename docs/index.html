@@ -498,7 +498,8 @@ function hidpi(c, h){
 
 /* ---------- table helper ---------- */
 function table(id, cols, rows, head){
-  const t = el(id); if(!t || !rows.length) return;
+  const t = el(id); if(!t) return;
+  if(!rows.length){ t.hidden = true; return; }
   const cap = t.querySelector("caption")?.outerHTML || "";
   t.innerHTML = cap +
     `<thead><tr><th>${head}</th>${cols.map(c=>`<th>${c[1]}</th>`).join("")}</tr></thead><tbody>` +
@@ -688,7 +689,12 @@ function updatePanel(){
 
 /* ---------- boot ---------- */
 function renderTables(){
-  table("t-data", [["pre_holdout","rows used",fx.n(0)],["label_1","label 1",fx.n(3)],
+  // Every table is optional. A results CSV that has not been generated yet
+  // should leave one table empty, not throw and take the interactive panel
+  // down with it.
+  if(!F || !Object.keys(F).length){ el("built").textContent =
+    "Results tables are not built yet. Run scripts/build_site_findings.py."; return; }
+  if(F.data) table("t-data", [["pre_holdout","rows used",fx.n(0)],["label_1","label 1",fx.n(3)],
     ["first","from",String],["last","to",String]],
     F.data.map(r=>[r.ticker,r]), "Fund");
   if(F.auc) table("t-auc", Object.keys(F.auc.logistic||{}).map(c=>

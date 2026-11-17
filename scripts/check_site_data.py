@@ -44,6 +44,14 @@ from src.models import model_zoo
 PERIODS = 252
 TOL = 1e-4  # generous: the file stores returns to 6 dp on purpose
 
+#: Models whose output depends on floating-point summation order, so a tiny
+#: fraction of positions may legitimately differ between machines.
+FITTED = {"gbt", "logistic", "meta_crossover_logistic"}
+#: How much of that we tolerate before calling it a real disagreement. 1% of
+#: 4,312 bars is 43, comfortably above the handful a boundary flip produces and
+#: far below anything a genuine bug would cause.
+POSITION_TOL = 0.01
+
 
 def decode_rle(runs, n):
     """The site's `decodeRLE`, in Python. Runs alternate starting from zero."""
@@ -100,7 +108,18 @@ def main() -> int:
         print(f"!! {path} missing — run scripts/build_site_data.py first")
         return 1
 
+    missing = [t for t in cfg["universe"]
+               if not (ROOT / "data" / "processed" / f"{t}_labelled.csv").exists()]
+    if missing:
+        print(f"!! data/processed/ has no labelled files for {', '.join(missing)}.")
+        print("   That directory is gitignored because everything in it is")
+        print("   regenerable, so a fresh clone will not have it. Build it with:")
+        print("       python src/data_process.py")
+        print("       python scripts/build_labels.py")
+        return 1
+
     d = json.loads(path.read_text(encoding="utf-8"))
+    drift = []
     holdout_start = pd.Timestamp(cfg["split"]["holdout_start"])
     folds, seed = cfg["split"]["n_folds"], cfg["seed"]
     failures = []
@@ -151,9 +170,25 @@ def main() -> int:
                 pos_site = decode_rle(d["tickers"][ticker]["positions"][model][key],
                                       len(rets))
 
-                if not np.array_equal(pos_site, pos_py.to_numpy()):
-                    failures.append(f"{ticker}/{model}/{name}: positions differ")
-                    continue
+                diff = int((pos_site != pos_py.to_numpy()).sum())
+                if diff:
+                    # A rule is not fitted, so any difference at all is a bug.
+                    # A gradient-boosted model is another matter: its leaf sums
+                    # depend on OpenMP thread count, so a prediction sitting
+                    # within a whisker of the 0.5 boundary can land either side
+                    # on a different machine. On GLD, 14 of 4,303 predictions
+                    # are within 1e-3 of the boundary, and each one it flips
+                    # moves roughly six bars of the position series. We let that
+                    # through, report it, and still require the statistics to
+                    # agree -- which they will not if something real changed.
+                    frac = diff / len(pos_site)
+                    if model in FITTED and frac <= POSITION_TOL:
+                        drift.append(f"{ticker}/{model}/{name}: "
+                                     f"{diff} bars ({frac:.2%})")
+                    else:
+                        failures.append(f"{ticker}/{model}/{name}: positions "
+                                        f"differ on {diff} bars ({frac:.2%})")
+                        continue
 
                 for cost in (0, 10):
                     a = browser_stats(pos_site, rets, cost, 0)
@@ -167,6 +202,13 @@ def main() -> int:
         print(f"  {ticker}: checked")
 
     print()
+    if drift:
+        print("Position drift inside tolerance (fitted models only):")
+        for x in drift:
+            print(f"  ~ {x}")
+        print("  These are boundary flips, not disagreements. The statistics")
+        print("  below still had to match.")
+        print()
     if failures:
         print(f"FAILED — {len(failures)} problem(s):")
         for f in failures:
