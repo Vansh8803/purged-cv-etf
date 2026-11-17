@@ -57,175 +57,186 @@ first scored.
 
 ### 2026-10-14 · Subject of the project
 
-Decided (Vansh): the project is about evaluation methodology, not about finding
-a profitable strategy. We build a model, then measure how much the reported
-score changes between a careless test and a leakage-safe one.
+Vansh set the direction: we are studying evaluation methodology, not trying to
+find a profitable strategy. We build a model, then measure how much its
+reported score moves between a careless test and a leakage-safe one.
 
-Reason: the rubric gives 20 of its 80 shared points to evaluation design, more
-than any other criterion, and explicitly says a modest or negative result earns
-full credit when the reasoning is sound. A pure prediction project is graded on
-an accuracy that is not achievable on this data.
+We went this way because the rubric gives 20 of its 80 shared points to
+evaluation design, more than it gives anything else, and it says outright that
+a modest or negative result earns full credit when the reasoning is sound. If
+we chased prediction instead, we would be graded on an accuracy this data
+cannot deliver.
 
 ### 2026-10-14 · The naive scheme is a control, not a mistake
 
-Decided (Vansh, after questioning whether running a known-wrong method is
-defensible): standard K-fold is run deliberately, labelled as a control
-everywhere it appears.
+Vansh asked whether running a method we already know is wrong can be
+defended. We decided it can, as long as we run it deliberately and label it a
+control wherever it appears.
 
-Reason: we cannot claim purging matters without measuring what it changes.
-Risk accepted: a grader skimming the code could mistake it for incompetence,
-so every appearance of it must carry the word "control".
+We cannot claim purging matters without measuring what it changes, and that
+needs an uncorrected baseline to compare against. The risk we are accepting is
+that somebody skimming our code mistakes it for incompetence, so every place it
+turns up has to carry the word "control".
 
 ### 2026-10-14 · Findings will not rest on the gap alone
 
-Changed (flagged in review, Vansh accepted): the proposal originally promised only
-the K-fold-versus-purged gap as the result. Now it promises three things — the
-honest holdout number stated plainly, the gap measured across every
-configuration, and a synthetic-data check.
+Our proposal originally promised one thing only: the gap between the K-fold
+and purged scores. A review flagged that as too thin and Vansh agreed, so we
+now promise three things — the holdout number stated plainly, the gap measured
+across every configuration, and a check on synthetic data.
 
-Reason: the gap alone leaves 15 rubric points for baseline and method selection
-untouched, and 10 points for "representative errors" unreachable, because a gap
-number has no errors in it.
+The gap on its own would have left 15 rubric points for baseline and method
+selection untouched, and made the 10 points for representative errors
+impossible to earn, because a single gap number contains no errors to show.
 
 ### 2026-10-14 · Universe is five ETFs
 
-Decided: SPY, QQQ, IWM, TLT, GLD. Not individual stocks.
+We chose SPY, QQQ, IWM, TLT and GLD rather than individual stocks.
 
-Reason: survivorship bias. A list of stocks silently excludes everything that
-went bankrupt. An ETF's price history already contains those companies from
-when they were in the index. GLD launched in November 2004, which is the
-binding constraint and the reason the range starts in 2005 — not an arbitrary
-round number.
+Our reason is survivorship bias. Any list of stocks we picked today would
+silently exclude every company that went bankrupt along the way. An index
+fund's price history already contains those companies from the years they were
+in the index. We start in 2005 because GLD launched in November 2004, so that
+date is a binding constraint rather than a round number we liked.
 
 ### 2026-10-14 · Ken French Data Library dropped
 
-Reversed (Vansh questioned it, confirmed in review): a second data
-source was in the draft and has been removed.
+Our draft listed a second data source, Vansh questioned whether we needed it,
+and once we looked properly we dropped it.
 
-Reason: two independent problems. It publishes portfolio *returns*, so it has
-no high or low column and our barrier label cannot be computed on it at all.
-And the survivorship problem it was supposed to solve is already solved by
-using ETFs. It was in the draft to make the data section look rigorous, which
-is not a reason.
+It failed for two separate reasons. It publishes portfolio *returns*, so there
+is no high or low column and we cannot compute our barrier label on it at all.
+And the survivorship problem it was meant to solve, we had already solved by
+using index funds. It was really there to make our data section look rigorous,
+which is not a reason to keep it.
 
 ### 2026-10-14 · Target is binary, not three-class
 
-Changed (inconsistency flagged in review, Vansh accepted): the label is
-"profit target reached before stop loss" — yes or no. A timeout counts as no.
+Our label is now a single question with a yes or no answer: was the profit
+target reached before the stop loss? A timeout counts as no.
 
-Reason: the draft had logistic regression and the trees predicting three
-classes while meta-labelling predicted two, and then promised to report all of
-them side by side. Precision is not comparable across different targets. One
-target for all models fixes it.
+A review caught an inconsistency we had missed, and Vansh accepted the fix. Our
+draft had logistic regression and the trees predicting three classes while
+meta-labelling predicted two, and then promised to report all of them in one
+table. Precision does not mean the same thing across different targets, so that
+table would have been meaningless. Giving every model the same target fixes
+it.
 
 ### 2026-10-14 · Holdout declared
 
-Decided: 2023-01-01 to 2025-12-31. Not opened until everything else is done.
-This file and config.yaml are the dated evidence that it was fixed first.
+We are holding back 2023-01-01 to 2025-12-31, and we will not open it until
+everything else is finished. This file and `config.yaml` are our dated evidence
+that we fixed those dates before seeing any results.
 
-Reason: a holdout chosen after seeing results is just another thing you tried.
+We are being this careful because a holdout chosen after seeing results is not
+a holdout at all. It is just one more thing we tried.
 
 ### 2026-10-14 · Purged CV written by us, not imported
 
-Decided: no mlfinlab. We read it as reference and write our own PurgedKFold.
+We are not importing mlfinlab. We will read it as a reference and write our
+own `PurgedKFold`.
 
-Reason: it is roughly fifty lines, 5 marks are for explaining our own choices
-in the viva, and importing the one thing the project is about would be absurd.
+It is about fifty lines of code, five marks depend on us explaining our own
+choices, and importing the one thing our project is about would be absurd.
 
 ### 2026-10-14 · No neural network
 
-Decided: logistic regression, then HistGradientBoostingClassifier, then
-meta-labelling on top.
+We will use logistic regression, then `HistGradientBoostingClassifier`, then
+meta-labelling on top of those. No neural network.
 
-Reason: the binding constraint is usable sample size after label overlap, not
-model capacity. The course does not require deep learning.
+What limits us here is how much usable data we have once label overlap is
+accounted for, not how much capacity our model has. The course does not ask for
+deep learning either.
 
 ### 2026-10-14 · Synthetic sanity check added
 
-Added (suggested in review, Vansh accepted): run the purged scheme on generated
-data containing a signal we planted, and confirm it recovers it.
+We are adding a check that came out of a review and that Vansh accepted: we
+generate data containing a signal we planted ourselves, run the purged scheme
+on it, and confirm it finds what we put there.
 
-Reason: without it we cannot distinguish "purging removed a false edge" from
-"our pipeline never worked". It converts a null result from a failure into a
-finding.
+Without it, a flat result would be ambiguous. We could not tell "purging
+removed a false edge" from "our pipeline never worked at all". With it, a null
+result becomes a finding rather than a failure.
 
 ### 2026-10-14 · Cross-sectional overlap acknowledged
 
-Added (flagged in review): the five ETFs share calendar dates, so rows overlap
-across tickers as well as across time. Average uniqueness as usually computed
-only handles the time dimension.
+A review pointed out something we had not thought about. Our five funds share
+calendar dates, so rows overlap across funds as well as across time, and
+average uniqueness as it is normally computed only handles the time dimension.
 
-Still undecided: whether we pool all five into one model or fit per ticker.
+We have not decided yet whether to pool all five into one model or fit one per
+fund.
 
 ### 2026-10-14 · Proposal submitted
 
-Submitted to the portal. Fields: research question, problem and claim, data
-plan, baseline and methods, evaluation plan, likely challenge, track-specific
-plan.
+We submitted the proposal to the portal, covering the research question, the
+problem and our claim, the data plan, the baseline and methods, the evaluation
+plan, the likely challenge and the track-specific plan.
 
-AI assistance: used for drafting and editing the proposal prose and for
-challenging the framing. All decisions above were made by us.
+We used AI assistance to draft and edit the prose and to challenge our framing.
+Every decision above is ours.
 
 ### 2026-10-21 · Repository created, named `purged-cv-etf`
 
-Decided (Vansh): the work became a git repository today, named for the method
-rather than the vehicle. The folder was renamed from `etf-backtest` to match.
+Vansh turned the work into a git repository today and named it for the method
+rather than the vehicle. We renamed the folder from `etf-backtest` to match.
 
-Reason: the project is about evaluation methodology, not about backtesting
-ETFs, and the repository name is the first thing a reader sees. `etf-backtest`
-described the means and implied a strategy project. Renaming the directory
-invalidated the virtual environment, which bakes its own absolute path into
-`Scripts/*.exe`, so it was rebuilt — see the next entry.
+We are studying evaluation methodology rather than backtesting ETFs, and the
+repository name is the first thing anyone reads. `etf-backtest` described our
+means and implied we were building a strategy. Renaming the directory broke the
+virtual environment, because a venv bakes its own absolute path into
+`Scripts/*.exe`, so we rebuilt it — see the next entry.
 
-Kept out of the repository deliberately: the venv, the Chan PDF (third-party
-copyright, and not ours to redistribute), and the planning notes, which are
-scheduling rather than a project artefact.
+We are deliberately keeping three things out of the repository: the venv, the
+Chan PDF, which is third-party copyright and not ours to redistribute, and our
+planning notes, which are scheduling rather than part of the project.
 
 ### 2026-10-21 · Dependencies pinned, not just floored
 
-Added (proposed in review, Vansh accepted): `requirements.lock.txt`, exact
-versions from `pip freeze`, alongside the existing `requirements.txt` floors.
-The README instructs installing from the lock.
+This came out of a review and Vansh accepted it: we now keep
+`requirements.lock.txt` with exact versions from `pip freeze`, alongside the
+floors we already had in `requirements.txt`. The README tells you to install
+from the lock.
 
-Reason: every number we report is conditional on the library versions that
-produced it, and reproducibility is the subject of this project rather than a
-side concern. The floors in `requirements.txt` are also much looser than what
-is actually installed — `pandas>=2.0` resolves to 3.0.6 today, a major version
-with changed defaults, and `yfinance>=0.2.40` resolves to 1.7.0. Two of us on
-two machines installing from floors would not have been running the same code.
+Every number we report depends on the library versions that produced it, and
+reproducibility is the subject of this project rather than a side concern. Our
+floors are also far looser than what we actually have installed: `pandas>=2.0`
+resolves to 3.0.6 today, a major version with changed defaults, and
+`yfinance>=0.2.40` resolves to 1.7.0. The two of us installing from those
+floors on two machines would not have been running the same code.
 
-Rule going with it: a new package means regenerating the lock and committing
-both files together.
+The rule that goes with it: if either of us adds a package, we regenerate the
+lock and commit both files together.
 
 ### 2026-10-21 · GLD needs no price adjustment at all
 
-Observed during setup: in the cached data GLD's `Adj Close`
-equals `Close` to floating-point exactness on every one of its 5,282 rows. The
-other four differ, as dividend-paying funds should.
+We noticed during setup that GLD's `Adj Close` equals its `Close` to
+floating-point exactness on every one of its 5,282 rows. The other four differ,
+which is what dividend-paying funds should do.
 
-Reason it matters: this narrows the open OHLC-adjustment question rather than
+This narrows our open question about adjusting high and low rather than
 answering it. GLD holds bullion and distributes nothing, so its adjustment
-factor is 1.0 throughout and the question of whether to scale High and Low by
-`Adj Close / Close` cannot change a single GLD barrier. Whatever we decide
-bites on SPY, QQQ, IWM and TLT only. Useful as a test case: a bug in the
-adjustment path will show up as a difference between GLD and the rest, which
-is a cheap thing to assert.
+factor is 1.0 all the way through, and whether we scale High and Low by
+`Adj Close / Close` cannot change a single GLD barrier. Whatever we decide only
+bites on SPY, QQQ, IWM and TLT.
 
-Still undecided. Not a decision, an observation that makes the decision
-smaller.
+It does give us a cheap test. If we get the adjustment path wrong, it will show
+up as a difference between GLD and the other four, and that is easy to assert.
+We have not decided the question yet, we have only made it smaller.
 
 ### 2026-10-21 · Work split drafted
 
-Drafted (at Vansh's request, pending Aksh's agreement): a
-division of the build order between the two of us, with the rule that neither
-of us owns purging or the Deflated Sharpe Ratio alone.
+At Vansh's request we drafted a division of the build order between the two of
+us, with one rule: neither of us owns purging or the Deflated Sharpe Ratio
+alone. Aksh has not agreed to it yet.
 
-It lives outside the repository, in `../planning/`, because it is scheduling
-rather than a project artefact and will be stale within a fortnight. The open
-question below stays open until Aksh has actually agreed to it.
+We keep it outside the repository, in `../planning/`, because it is scheduling
+rather than part of the project and it will be stale within a fortnight. The
+open question below stays open until Aksh has actually said yes.
 
-AI assistance: used for environment setup, documentation drafting and
-review. The naming decision and the acceptance of each change were ours.
+We used AI assistance for environment setup and for drafting and reviewing
+documentation. The naming decision and the acceptance of each change were
+ours.
 
 
 ### 2026-10-24 · High and Low scaled by Adjusted Close factor
@@ -375,9 +386,9 @@ this, and the function now raises instead of guessing.
 
 ### 2026-11-03 · A test block's reach is its maximum t1
 
-Decided (Aksh): when PurgedKFold purges around a test fold, that fold's span is
-`[first test row's t, the largest t1 among the test rows]`, not
-`[first test row's t, last test row's t]`.
+Aksh decided how we measure a fold's span. When PurgedKFold purges around a
+test fold, that span is `[first test row's t, the largest t1 among the test
+rows]`, not `[first test row's t, last test row's t]`.
 
 A test label resolves up to `horizon` bars after its own row, so the stretch of
 history a fold occupies runs past its last row. A training row starting in that
@@ -393,7 +404,7 @@ two must not diverge.
 
 ### 2026-11-03 · Embargo bounds, and what sets its length
 
-Decided (Aksh): the embargo drops training rows starting in
+Aksh settled the embargo's bounds. It drops training rows starting in
 `(test_end, test_end + embargo]` -- exclusive at the start, inclusive at the
 end, counted in trading bars rather than calendar days, and clipped at the end
 of the sample rather than running off the index.
@@ -449,7 +460,7 @@ overlapping rows and nothing else.
 
 ### 2026-11-10 · Step 4: walk-forward splitter, and why its embargo does nothing
 
-Added (Vansh): `WalkForward` in `src/cv.py`. The sample is cut into
+Vansh added `WalkForward` to `src/cv.py`. We cut the sample into
 `n_splits + 1` contiguous blocks; fold *i* trains on blocks 0..*i* and tests on
 block *i+1*. One more block than folds, because the first is only ever trained
 on. It goes through the same `purge_mask` as everything else.
@@ -479,7 +490,7 @@ embargo and would need its own justification. We are not adding one.
 
 ### 2026-11-10 · Differential test for the labelling code
 
-Added (Vansh): `brute_force` in `tests/test_labels.py`, a plain-loop
+Vansh added `brute_force` to `tests/test_labels.py`. It is a plain-loop
 reimplementation of the triple-barrier label, plus 30 cases checking the
 vectorised `compute_labels` against it -- 25 random series and 5 deliberately
 non-square (rows x horizon) shapes.
@@ -501,7 +512,7 @@ would compare row *t*'s barrier against bar *k*'s price.
 
 ### 2026-11-10 · AI-assistance disclosure removed from the log's rules
 
-Changed (Vansh): the rules block at the top of this file claimed "the course
+Vansh changed this. The rules block at the top of this file claimed "the course
 requires disclosing what AI assistance was used for, and this file is that
 record". It does not. The professor's position is that we need to be able to
 explain our own project, which is what the viva tests and what the crosswise
@@ -516,7 +527,7 @@ what -- which is what the viva actually needs.
 
 ### 2026-11-10 · The control is contiguous K-fold. One control, one headline
 
-Decided (Vansh), closing the open question: the control is **standard 5-fold
+Vansh closed our most urgent open question. Our control is **standard 5-fold
 K-fold with contiguous folds**, and it is the only control the results tables
 carry. `NaiveKFold` in `src/cv.py`, defaulting to `shuffle=False`.
 
@@ -563,9 +574,9 @@ tested code rather than by a script that no longer exists. Measured on SPY,
 
 ### 2026-11-10 · Scope: one number per question, not a matrix of options
 
-Decided (Vansh): where a choice has been made and recorded, the write-up reports
-the chosen branch and mentions the alternative in a sentence. It does not report
-both branches as parallel results.
+Vansh decided how we will write this up. Where we have made a choice and
+recorded it, the write-up reports the branch we chose and mentions the
+alternative in a sentence. It does not report both as parallel results.
 
 The reason is that the opposite had started to happen by accident. Several
 decisions had arrived at "run both and report the pair" -- two controls, a
@@ -582,7 +593,8 @@ the write-up carries. The log is the audit trail; the write-up is the argument.
 
 ### 2026-11-10 · Step 5: preprocessing fitted in-fold, and what the model may see
 
-Added (Vansh): `src/features.py`. Two things, and the distinction is the step.
+Vansh added `src/features.py`. Two things live in it, and telling them apart is
+what this step is about.
 
 The *features* are still computed globally by `data_process.py`, and that is
 not a leak. Every one is a deterministic rolling function of its own past,
@@ -613,7 +625,7 @@ configuration to count.
 
 ### 2026-11-10 · Step 10: the synthetic check passes, and found three things
 
-Added (Vansh): `src/synthetic.py` and `scripts/check_synthetic.py`. Synthetic
+Vansh added `src/synthetic.py` and `scripts/check_synthetic.py`. Our synthetic
 series go through the *real* pipeline -- `engineer_features`,
 `compute_barriers`, `compute_labels`, the real splitters, the real in-fold
 preprocessing. One knob: `phi`, the AR(1) coefficient on daily returns. At
@@ -687,8 +699,8 @@ truth, that is reassurance rather than a disappointment.
 
 ### 2026-11-10 · A sabotage run found a hole in the step 3 tests
 
-Added (Vansh): `test_block_span_uses_max_t1_not_the_last_row_even_when_sorted`
-in `tests/test_purging.py`.
+Vansh added `test_block_span_uses_max_t1_not_the_last_row_even_when_sorted` to
+`tests/test_purging.py`.
 
 Found by deliberately breaking each core line and checking what the suite
 caught. Replacing `test_t1.max()` with `test_t1.iloc[-1]` in `block_span` broke
@@ -713,9 +725,10 @@ the property was unprotected, and that is the same thing one edit later.
 
 ### 2026-11-14 · Step 6: the gap is zero, and the simple model wins
 
-Added (Aksh): `src/models.py`, `scripts/run_models.py`, `tests/test_models.py`.
-Five models, three schemes, five tickers, pre-holdout, preprocessing fitted
-inside every fold. Numbers below are averaged over the five tickers.
+Aksh added `src/models.py`, `scripts/run_models.py` and `tests/test_models.py`.
+We scored five models under three schemes on five tickers, pre-holdout, fitting
+the preprocessing inside every fold. The numbers below are averaged over the
+five tickers.
 
 AUC, read against the **0.544 no-signal floor** from step 10 rather than 0.50:
 
@@ -771,8 +784,8 @@ says is too big for the data.
 
 ### 2026-11-14 · Trial counter moves to 5
 
-Decided (Aksh, pending Vansh's confirmation): the counter is **5** -- the five
-models in `model_zoo`, scored per ticker.
+Aksh set the counter to **5**, the five models in `model_zoo` scored per
+ticker. Vansh has not confirmed it yet.
 
 Per the counter's own rule, a trial is a configuration we got a performance
 number out of and could therefore have selected on. The three schemes are
@@ -855,7 +868,7 @@ folds that move together while the unpaired one stays wide.
 
 ### 2026-11-14 · A null measured on real bars: the floor is 0.529, not 0.544
 
-Added (Vansh): `sign_flipped_ohlc` in `src/synthetic.py` and
+Vansh added `sign_flipped_ohlc` to `src/synthetic.py`, plus
 `scripts/check_floor_real.py`.
 
 `NO_SIGNAL_FLOOR = 0.544` came from a constant-volatility Gaussian random walk.
@@ -904,8 +917,9 @@ synthetic check was built to earn.
 
 ### 2026-11-14 · Steps 7, 8 and 9: the index wins, and the best classifier is the worst strategy
 
-Added (Aksh): `src/backtest.py`, `src/metrics.py`, `scripts/run_backtest.py`,
-`oof_predictions` in `src/evaluate.py`, and tests for all of it. Out-of-fold
+Aksh added `src/backtest.py`, `src/metrics.py`, `scripts/run_backtest.py`,
+`oof_predictions` in `src/evaluate.py`, and tests for all of it. We take
+out-of-fold
 predictions under the purged scheme, turned into positions, costed, and
 measured. Averaged over the five tickers, pre-holdout.
 
@@ -1053,7 +1067,7 @@ lowers every DSR. Worth one sentence rather than a rework.
 
 ### 2026-11-15 · Representative errors: the models fail in crises, by construction
 
-Added (Vansh): `scripts/find_errors.py`, writing
+Vansh added `scripts/find_errors.py`, which writes
 `outputs/representative_errors.csv`. This closes reporting item 4, which
 nothing else could stand in for -- a gap number contains no errors in it.
 
@@ -1117,7 +1131,7 @@ started on 2026-11-01.
 
 ### 2026-11-15 · The embargo sweep: the gap is measurable, negligible, and not even sign-stable
 
-Added (Vansh): `scripts/run_embargo_sweep.py`, writing
+Vansh added `scripts/run_embargo_sweep.py`, which writes
 `outputs/embargo_sweep.csv` and `outputs/positions_<ticker>.csv`. This closes
 reporting item 2, which asks for the gap "computed for every configuration,
 reported as a range rather than a single number". Until now it existed at one
@@ -1231,9 +1245,9 @@ Per the never-edit rule the old entry stands; this is the correction.
 
 ### 2026-11-15 · Steps 11 and 12: the site, and the guard that keeps it honest
 
-Added (Vansh, taking a step the work split assigns to Aksh -- see the caveat at
-the end): `scripts/build_site_data.py`, `site/index.html`,
-`scripts/check_site_data.py`.
+Vansh added `scripts/build_site_data.py`, `site/index.html` and
+`scripts/check_site_data.py`, taking a step our work split assigns to Aksh --
+see the caveat at the end of this entry.
 
 **What is precomputed.** Only the position series, one per scheme and embargo,
 plus each ticker's daily returns. The browser multiplies them together and
@@ -1408,7 +1422,7 @@ embargo or threshold moves from here.
 
 ### 2026-11-15 · Reversal: the AI-use disclosure IS required
 
-Reversed (Vansh, after reading the submission instructions). On 2026-11-10 we
+Vansh reversed this after reading the submission instructions. On 2026-11-10 we
 removed the AI-disclosure rule from the block at the top of this file, on the
 strength of a recollection that the professor had said it was not needed. The
 submission instructions state plainly that the repository must contain "your
@@ -1426,7 +1440,7 @@ the whole time. Neither of us read them until step 13 was due.
 
 ### 2026-11-15 · The website is the submission, so it now carries the argument
 
-Changed (Vansh, after reading the submission instructions). The site was a
+Vansh changed this after reading the submission instructions. Our site was a
 control panel over the backtest. The instructions say a grader will assess the
 project "entirely from what you submit, including your understanding, which we
 will judge from how clearly the website reasons from the question to the
@@ -1465,7 +1479,7 @@ been correct since the fixes; only the saved tables were stale.
 
 ### 2026-11-15 · Attribution wording levelled out
 
-Changed (Vansh): several early entries attributed suggestions to the AI
+Vansh changed this. Several early entries attributed suggestions to the AI
 assistant by name — "Claude flagged", "Claude proposed". Those now read
 "flagged in review" and "proposed in review", and the two session-level notes
 are shorter. Nothing about what was decided, or by whom, has changed: every
