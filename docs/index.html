@@ -4,91 +4,132 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Purged Cross-Validation for ETF Backtests</title>
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Mono:wght@400&display=swap">
 <style>
+  /* One committed light palette: warm oat paper, deep slate blue to read
+     against it, rust reserved for the things that went wrong. */
   :root{
-    --bg:#fafbfa; --card:#fff; --ink:#1a1d1b; --mid:#5d645f; --faint:#8b928d;
-    --line:#e2e6e3; --accent:#1f6b47; --soft:#eaf2ed; --warn:#9c3b25; --warnsoft:#fbeeea;
-    --grid:#edf0ee;
-    --sans:"Inter",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
-    --mono:ui-monospace,SFMono-Regular,Menlo,monospace;
-  }
-  @media (prefers-color-scheme:dark){:root:not([data-theme=light]){
-    --bg:#141715; --card:#1c201d; --ink:#e9ece9; --mid:#a3aba5; --faint:#79817b;
-    --line:#2b312d; --accent:#5fb98a; --soft:#19271f; --warn:#e09177; --warnsoft:#2a1b16;
-    --grid:#232825; color-scheme:dark;
-  }}
-  :root[data-theme=dark]{
-    --bg:#141715; --card:#1c201d; --ink:#e9ece9; --mid:#a3aba5; --faint:#79817b;
-    --line:#2b312d; --accent:#5fb98a; --soft:#19271f; --warn:#e09177; --warnsoft:#2a1b16;
-    --grid:#232825; color-scheme:dark;
+    --bg:#f1eee3; --card:#faf8f2; --raise:#fffefb;
+    --ink:#231f1a; --mid:#5f594e; --faint:#6f6a5e;
+    --line:#ddd7c7; --grid:#e6e1d2;
+    --accent:#2b4a6f; --soft:#e4eaf1;
+    --warn:#9a4327; --warnsoft:#f6e7df;
+    --sans:"Archivo",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
+    --serif:"Source Serif 4",Georgia,"Times New Roman",serif;
+    --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    color-scheme:light;
   }
   *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--ink);font:400 16px/1.6 var(--sans)}
+  body{margin:0;background:var(--bg);color:var(--ink);font:400 17px/1.66 var(--serif);
+    -webkit-font-smoothing:antialiased}
   .wrap{max-width:820px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));
     padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 72px}
-  h1{font-size:clamp(1.65rem,5vw,2.2rem);line-height:1.12;letter-spacing:-.025em;
-    margin:0 0 12px;font-weight:700;text-wrap:balance}
-  h2{font-size:1.32rem;line-height:1.25;letter-spacing:-.015em;margin:52px 0 10px;
-    font-weight:650;scroll-margin-top:16px;text-wrap:balance}
-  h3{font-size:1rem;margin:28px 0 6px;font-weight:650}
-  p{margin:12px 0}
-  .lede{font-size:1.1rem;color:var(--mid)}
-  .meta{font-size:.85rem;color:var(--faint);margin:16px 0 0}
-  a{color:var(--accent)}
-  code{font:.87em var(--mono);background:var(--grid);padding:.1em .34em;border-radius:4px}
-  ul{margin:12px 0;padding-left:20px} li{margin:6px 0} li::marker{color:var(--faint)}
+  h1{font:700 clamp(1.7rem,5vw,2.35rem)/1.1 var(--sans);letter-spacing:-.028em;
+    margin:0 0 14px;text-wrap:balance}
+  h2{font:600 1.3rem/1.25 var(--sans);letter-spacing:-.015em;margin:54px 0 10px;
+    scroll-margin-top:16px;text-wrap:balance}
+  h3{font:600 1.02rem/1.35 var(--sans);margin:30px 0 4px}
+  p{margin:13px 0}
+  .lede{font-size:1.13rem;color:var(--mid)}
+  .meta{font:400 .84rem/1.6 var(--sans);color:var(--faint);margin:18px 0 0}
+  a{color:var(--accent);text-decoration-thickness:1px;text-underline-offset:2px}
+  code{font:.85em var(--mono);background:var(--grid);padding:.12em .36em;border-radius:4px}
+  ul{margin:13px 0;padding-left:21px} li{margin:7px 0} li::marker{color:var(--faint)}
+  b,strong{font-weight:600}
 
-  .answer{background:var(--soft);border-radius:10px;padding:18px 20px;margin:24px 0}
-  .answer h3{margin:0 0 8px;color:var(--accent);font-size:.76rem;text-transform:uppercase;
-    letter-spacing:.09em}
-  .answer p{margin:8px 0} .answer p:last-child{margin-bottom:0}
+  /* Three tiers of box, loudest first. A tier is a claim about how much the
+     reader should slow down, so each one looks different rather than just
+     differently coloured. */
 
-  .box{background:var(--card);border:1px solid var(--line);border-radius:10px;
-    padding:16px 18px;margin:20px 0}
-  .box.flag{border-left:3px solid var(--warn);background:var(--warnsoft)}
+  /* 1. a result we want you to leave with */
+  .answer{background:var(--soft);border-radius:12px;padding:20px 22px;margin:26px 0;
+    box-shadow:inset 0 0 0 1px #cfd9e6}
+  .answer h3{margin:0 0 9px;color:var(--accent);font:700 .72rem/1 var(--sans);
+    text-transform:uppercase;letter-spacing:.11em}
+  .answer p{margin:9px 0;font-size:1.04rem} .answer p:last-child{margin-bottom:0}
+
+  /* 2. a mechanism worth pausing on */
+  .box{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--accent);
+    border-radius:0 10px 10px 0;padding:15px 18px;margin:22px 0}
+  .box p:first-child{margin-top:0} .box p:last-child{margin-bottom:0}
+  .box .tag{display:block;font:700 .68rem/1 var(--sans);text-transform:uppercase;
+    letter-spacing:.11em;color:var(--accent);margin-bottom:8px}
+
+  /* 3. something we got wrong, or a reading that would mislead */
+  .box.flag{border-left-color:var(--warn);background:var(--warnsoft);border-color:#e8d5c9}
+  .box.flag .tag{color:var(--warn)}
+
+  /* quietest: a caveat that belongs next to the thing it qualifies */
+  .aside{font:400 .92rem/1.6 var(--serif);color:var(--mid);background:var(--grid);
+    border-radius:8px;padding:11px 14px;margin:16px 0}
+
+  /* headline figures, because these four numbers are the project */
+  .stats{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);
+    border-radius:12px;overflow:hidden;margin:26px 0;
+    grid-template-columns:repeat(auto-fit,minmax(142px,1fr))}
+  .stats div{background:var(--raise);padding:14px 16px}
+  .stats .n{font:700 1.5rem/1.1 var(--sans);font-variant-numeric:tabular-nums;
+    letter-spacing:-.02em;color:var(--accent)}
+  .stats .k{font:500 .72rem/1.35 var(--sans);text-transform:uppercase;letter-spacing:.07em;
+    color:var(--faint);margin-top:5px}
 
   /* interactive blocks */
-  .demo{background:var(--card);border:1px solid var(--line);border-radius:12px;
-    padding:16px;margin:22px 0}
+  /* an interactive panel is raised off the paper, so it reads as a thing you
+     operate rather than more page to read */
+  .demo{background:var(--raise);border:1px solid var(--line);border-radius:12px;
+    padding:18px;margin:24px 0;box-shadow:0 1px 2px rgba(60,48,30,.05),
+    0 6px 16px -10px rgba(60,48,30,.14)}
   .demo .hd{display:flex;justify-content:space-between;align-items:baseline;gap:12px;
-    flex-wrap:wrap;margin-bottom:12px}
-  .demo .hd b{font-size:.74rem;text-transform:uppercase;letter-spacing:.09em;color:var(--accent)}
-  .demo .hd span{font-size:.82rem;color:var(--faint)}
+    flex-wrap:wrap;margin-bottom:13px;padding-bottom:11px;border-bottom:1px solid var(--grid)}
+  .demo .hd b{font:700 .72rem/1 var(--sans);text-transform:uppercase;letter-spacing:.11em;
+    color:var(--accent)}
+  .demo .hd span{font:500 .82rem var(--sans);color:var(--faint);
+    font-variant-numeric:tabular-nums}
   canvas{width:100%;display:block;border-radius:6px}
-  .ctl{display:grid;gap:14px;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));
-    margin-top:14px}
-  label{display:block;font-size:.72rem;text-transform:uppercase;letter-spacing:.08em;
-    color:var(--mid);margin-bottom:5px}
+  .ctl{display:grid;gap:15px;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));
+    margin-top:15px}
+  label{display:block;font:500 .7rem/1.3 var(--sans);text-transform:uppercase;
+    letter-spacing:.08em;color:var(--mid);margin-bottom:6px}
   select,input[type=range]{width:100%}
-  select{padding:7px;border:1px solid var(--line);border-radius:6px;background:var(--bg);
-    color:var(--ink);font:inherit;font-size:.88rem}
-  .v{font-weight:650;font-variant-numeric:tabular-nums;color:var(--ink)}
+  select{padding:7px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);
+    color:var(--ink);font:500 .86rem var(--sans)}
+  input[type=range]{accent-color:var(--accent)}
+  .v{font-weight:700;font-variant-numeric:tabular-nums;color:var(--ink)}
   fieldset{border:0;padding:0;margin:0} fieldset:disabled{opacity:.4}
-  .seg{display:flex;gap:0;border:1px solid var(--line);border-radius:7px;overflow:hidden}
-  .seg button{flex:1;padding:8px 6px;border:0;background:var(--bg);color:var(--mid);
-    font:600 .82rem var(--sans);cursor:pointer}
-  .seg button[aria-pressed=true]{background:var(--accent);color:#fff}
+  .seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
+  .seg button{flex:1;padding:9px 6px;border:0;background:var(--bg);color:var(--mid);
+    font:600 .82rem var(--sans);cursor:pointer;transition:background .12s,color .12s}
+  .seg button:hover{background:var(--grid)}
+  .seg button[aria-pressed=true]{background:var(--accent);color:var(--raise)}
   .read{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);
-    border-radius:8px;overflow:hidden;margin-top:14px;
-    grid-template-columns:repeat(auto-fit,minmax(104px,1fr))}
-  .read div{background:var(--card);padding:10px 12px}
-  .read .k{font-size:.68rem;text-transform:uppercase;letter-spacing:.07em;color:var(--faint)}
-  .read .n{font-size:1.06rem;font-weight:650;font-variant-numeric:tabular-nums;margin-top:2px}
-  .legend{display:flex;gap:16px;flex-wrap:wrap;font-size:.78rem;color:var(--faint);margin-top:10px}
+    border-radius:9px;overflow:hidden;margin-top:15px;
+    grid-template-columns:repeat(auto-fit,minmax(108px,1fr))}
+  .read div{background:var(--card);padding:11px 13px}
+  .read .k{font:500 .67rem/1.3 var(--sans);text-transform:uppercase;letter-spacing:.07em;
+    color:var(--faint)}
+  .read .n{font:700 1.08rem/1.25 var(--sans);font-variant-numeric:tabular-nums;margin-top:3px}
+  .read .n.hi{color:var(--accent)} .read .n.lo{color:var(--warn)}
+  .legend{display:flex;gap:17px;flex-wrap:wrap;font:400 .78rem var(--sans);
+    color:var(--faint);margin-top:11px}
   .sw{display:inline-block;width:18px;height:3px;vertical-align:middle;margin-right:5px}
 
-  .tw{overflow-x:auto;margin:18px 0}
-  table{width:100%;border-collapse:collapse;font-size:.85rem;min-width:380px}
-  th,td{padding:7px 9px;text-align:right;border-bottom:1px solid var(--line);
+  .tw{overflow-x:auto;margin:20px 0}
+  table{width:100%;border-collapse:collapse;font:400 .85rem/1.45 var(--sans);min-width:380px}
+  th,td{padding:8px 10px;text-align:right;border-bottom:1px solid var(--grid);
     font-variant-numeric:tabular-nums}
-  th:first-child,td:first-child{text-align:left;font-variant-numeric:normal}
-  thead th{font-weight:600;color:var(--mid);border-bottom:1.5px solid var(--ink);
-    font-size:.72rem;text-transform:uppercase;letter-spacing:.05em}
+  th:first-child,td:first-child{text-align:left;font-variant-numeric:normal;font-weight:500}
+  thead th{font-weight:600;color:var(--mid);background:var(--card);
+    border-bottom:1.5px solid var(--line);font-size:.71rem;text-transform:uppercase;
+    letter-spacing:.06em}
+  tbody tr:last-child td{border-bottom:0}
+  tbody tr:hover{background:var(--card)}
   td.hi{font-weight:700;color:var(--accent)} td.lo{font-weight:700;color:var(--warn)}
-  caption{caption-side:bottom;text-align:left;color:var(--faint);font-size:.78rem;padding-top:8px}
+  caption{caption-side:bottom;text-align:left;color:var(--faint);
+    font:400 .79rem/1.55 var(--sans);padding-top:9px}
 
-  footer{margin-top:56px;padding-top:20px;border-top:1px solid var(--line);
-    color:var(--faint);font-size:.85rem}
+  footer{margin-top:60px;padding-top:22px;border-top:2px solid var(--line);
+    color:var(--faint);font:400 .85rem/1.65 var(--sans)}
   @media (max-width:560px){h2{margin-top:40px}}
   @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
@@ -112,6 +153,13 @@
   folds</b>, not on whether you purge. We cut ours as blocks of time, which leaks 0.33% of
   training rows, so purging had almost nothing to remove.</p>
   <p>Shuffle the same folds and the leak jumps to 88%. You can try that two sections down.</p>
+</div>
+
+<div class="stats">
+  <div><div class="n">662</div><div class="k">independent observations in 4,302 rows</div></div>
+  <div><div class="n">0.544</div><div class="k">AUC a model with no signal reaches</div></div>
+  <div><div class="n">0.33%</div><div class="k">training rows our control leaks</div></div>
+  <div><div class="n">0.5754</div><div class="k">holdout AUC, predicted as 0.5755</div></div>
 </div>
 
 <h2 id="label">1. What one row is, and what we asked of it</h2>
@@ -154,6 +202,7 @@ apart at the end of 2008, which is the point of scaling them. And most days reso
 of bars, not ten — the label window is short, which matters for the next section.</p>
 
 <div class="box flag">
+  <span class="tag">A mistake we caught</span>
   <p><b>We got this wrong first.</b> Our original barriers were 2.5 times narrower. At that
   width a single day's trading range was usually already wider than the gap, so the median day
   resolved in <b>one bar</b> and the ten-day limit almost never mattered.</p>
@@ -244,6 +293,7 @@ the end.</p>
 its standard error. One baseline needs saying out loud:</p>
 
 <div class="box flag">
+  <span class="tag">Read this before the results</span>
   <p><b>An AUC of 0.544 means no signal, not a weak one.</b> We generated fake price series with
   no predictability at all, ran the whole pipeline on them, and the full feature set still
   scored 0.544.</p>
@@ -341,9 +391,9 @@ its damage.</p>
   </div>
 </div>
 
-<p style="font-size:.9rem;color:var(--mid)">"One bar late" delays the position by a bar. It is a
-real cost of being slow, but it is not the same as filling at the next open, which we could not
-do as arithmetic on a position series.</p>
+<p class="aside">"One bar late" delays the position by a bar. It is a real cost of being
+slow, but it is not the same as filling at the next open, which we could not do as
+arithmetic on a position series.</p>
 
 <h2 id="holdout">6. The holdout, opened once</h2>
 
@@ -368,6 +418,7 @@ same reason and none beat the index. Nothing reaches a t-statistic of 2, because
 Sharpe standard error of 0.580 rather than 0.242.</p>
 
 <div class="box flag">
+  <span class="tag">Against us</span>
   <p><b>Our one significant finding reversed.</b> Before the holdout, logistic's selection edge
   was −0.164 with a t of −2.36, the only result we had that cleared two standard errors. We wrote
   that it was measurably picking bad days. On the holdout the same model's edge is <b>+0.179</b>.</p>
@@ -624,7 +675,7 @@ function updatePanel(){
   const isCtl = sch==="control_kfold";
   el("banner").className = "box" + (isCtl?" flag":"");
   el("banner").innerHTML = isCtl
-    ? "<p><b>This is the control.</b> Standard K-fold is wrong for this data and we run it on purpose, so we can measure what purging changes. Do not read it as a result.</p>"
+    ? "<span class=\"tag\">You are looking at the control</span><p>Standard K-fold is wrong for this data and we run it on purpose, so we can measure what purging changes. Do not read it as a result.</p>"
     : `<p>Pre-holdout, out of fold. Last day ${DATA.dates[DATA.dates.length-1]}; the 2023–2025 holdout is not in this file.</p>`;
 }
 
