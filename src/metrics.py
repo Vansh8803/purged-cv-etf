@@ -1,20 +1,14 @@
-"""Steps 8 and 9: Sharpe with its error bars, drawdown, and the deflated ratio.
+"""Sharpe with its error bars, drawdown, turnover and the deflated ratio.
 
-The point of this module is that a Sharpe ratio on its own is not evidence.
+A Sharpe ratio on its own is not evidence. It is a mean over a standard
+deviation, so it is a t-statistic in disguise and carries a sampling error wide
+enough to swallow most results. On top of that, reporting the best of five
+models is multiple testing whether or not it felt like it. `sharpe_se` handles
+the first problem, `deflated_sharpe` the second.
 
-Sharpe is a mean divided by a standard deviation, which makes it a t-statistic
-in disguise, so it has a sampling error -- and on a few thousand daily bars
-that error is wide enough to swallow most results anybody reports. Then, on top
-of the sampling error, there is the selection problem: trying five models and
-reporting the best is a multiple-testing procedure whether or not it felt like
-one. The Deflated Sharpe Ratio handles the second; `sharpe_se` handles the
-first; they are different problems and both are needed.
-
-**Per-period, not annualised.** Everything in the DSR is computed on per-period
-returns. Annualising multiplies Sharpe by sqrt(252) but leaves skew, kurtosis
-and the trial distribution alone, so feeding an annualised ratio into the
-deflation formula silently inflates it by an order of magnitude. `sharpe` takes
-a `periods` argument and annualises; `deflated_sharpe` deliberately does not.
+Everything in the deflation is per-period. Annualising scales Sharpe by
+sqrt(252) but leaves skew and kurtosis alone, so feeding it an annualised ratio
+inflates the result silently.
 """
 
 import numpy as np
@@ -34,10 +28,10 @@ def _clean(returns):
 
 
 def sharpe(returns, periods=252):
-    """Annualised Sharpe. Zero risk-free rate, stated rather than assumed.
+    """Annualised Sharpe, zero risk-free rate.
 
-    Returns 0.0 for a return series that never moves, which is what a strategy
-    that never trades produces -- a degenerate case, not an error.
+    Returns 0.0 for a series that never moves, which is what a strategy that
+    never trades gives us.
     """
     r = _clean(returns)
     sd = r.std(ddof=1)
@@ -49,10 +43,10 @@ def sharpe_se(returns, periods=252):
 
         SE(SR) = sqrt( (1 + SR^2 / 2) / T )
 
-    on the per-period ratio, then annualised with the ratio itself. The IID
-    assumption is the weak point and we say so: daily returns are serially
-    correlated and volatility clusters, so this understates the true error.
-    It is still far better than the usual practice of quoting no error at all.
+    computed on the per-period ratio, then annualised. The IID assumption is
+    the weak point: daily returns are serially correlated and volatility
+    clusters, so this understates the true error. Still better than quoting no
+    error at all, which is the usual practice.
     """
     r = _clean(returns)
     sd = r.std(ddof=1)
@@ -63,27 +57,25 @@ def sharpe_se(returns, periods=252):
 
 
 def max_drawdown(returns):
-    """Worst peak-to-trough fall of the compounded equity curve, as a positive
-    fraction. A good Sharpe with a 60% drawdown is not something anyone holds.
+    """Worst peak-to-trough fall of the equity curve, as a positive fraction.
+
+    Sharpe assumes we held on through everything; this says whether anyone
+    would have.
     """
     equity = (1.0 + _clean(returns)).cumprod()
     return float((1.0 - equity / np.maximum.accumulate(equity)).max())
 
 
 def expected_max_sharpe(n_trials, sr_std):
-    """E[max SR] across `n_trials` independent trials of zero true skill.
+    """E[max SR] across `n_trials` trials of zero skill. Per-period.
 
-    The benchmark the observed ratio has to clear. Bailey and Lopez de Prado
-    (2014), equation 5:
+    Bailey and Lopez de Prado (2014), equation 5:
 
         E[max] ~ sr_std * ( (1 - g) Z^-1(1 - 1/N) + g Z^-1(1 - 1/(N e)) )
 
-    with g the Euler-Mascheroni constant. It grows with both the number of
-    things tried and how much they varied: twenty near-identical configurations
-    buy far less luck than twenty wildly different ones, which is why the
-    spread of the trials and not just their count goes into the formula.
-
-    Per-period, like everything the DSR touches.
+    with g the Euler-Mascheroni constant. It grows with both the count and the
+    spread, since twenty near-identical configurations buy less luck than
+    twenty different ones.
     """
     if n_trials < 2 or sr_std <= 0:
         return 0.0
@@ -93,25 +85,18 @@ def expected_max_sharpe(n_trials, sr_std):
 
 
 def deflated_sharpe(returns, n_trials, sr_std):
-    """Probability the observed Sharpe reflects skill rather than the best of N.
+    """Probability the observed Sharpe is skill rather than the best of N.
 
-    Bailey and Lopez de Prado (2014). Takes the observed per-period ratio, the
-    benchmark `expected_max_sharpe` above, and the shape of the return series,
-    and returns a probability:
+    Bailey and Lopez de Prado (2014):
 
         DSR = Z[ (SR - SR*) sqrt(T - 1) / sqrt(1 - g3 SR + (g4 - 1)/4 SR^2) ]
 
-    **Why skew and kurtosis are in there.** The deflation asks how good the
-    luckiest of N tries would look if none of them had any skill, and that
-    depends on the shape of the distribution being drawn from. Returns are
-    negatively skewed and fat-tailed, so assuming normality understates how
-    extreme the best of N can get and the correction comes out too weak. `g4`
-    is raw kurtosis -- 3 for a normal -- not the excess form.
+    Skew and kurtosis are in there because the deflation asks how extreme the
+    luckiest of N skill-less tries could look, which depends on the shape of
+    the distribution being drawn from. `g4` is raw kurtosis, 3 for a normal.
 
-    **The catch, which belongs in the write-up.** `n_trials` is whatever we
-    honestly admit to having tried. Undercount it and this number is worse than
-    useless, because it looks rigorous. That is the entire reason the decision
-    log keeps a trial counter.
+    `n_trials` is whatever we honestly admit to trying. Undercount it and the
+    number is worse than useless, because it still looks rigorous.
     """
     r = _clean(returns)
     sd = r.std(ddof=1)
@@ -132,12 +117,11 @@ def deflated_sharpe(returns, n_trials, sr_std):
 
 def summary(returns, traded=None, position=None, n_trials=None, sr_std=None,
             periods=252):
-    """Everything step 8 reports for one strategy, plus the DSR when asked.
+    """Everything we report for one strategy, plus the DSR when asked.
 
-    `n_trials` and `sr_std` are optional because the DSR is a property of the
-    whole search, not of one backtest: it needs the spread of Sharpes across
-    every configuration tried, which only the caller running the comparison
-    knows.
+    `n_trials` and `sr_std` are optional because the DSR belongs to the whole
+    search rather than to one backtest, so only the caller running the
+    comparison knows them.
     """
     out = {
         "sharpe": sharpe(returns, periods),
@@ -162,20 +146,14 @@ def summary(returns, traded=None, position=None, n_trials=None, sr_std=None,
 def exposure_matched_sharpe(position, returns, n_draws=200, seed=0, periods=252):
     """Sharpe from holding the same *number* of bars, picked at random.
 
-    The control that makes the exposure caveat a number instead of an apology.
-    A long-or-flat strategy invested 22% of the time forfeits most of the
-    equity premium whatever it selects, so comparing its Sharpe with
-    buy-and-hold's confounds two different things: how well it chose, and how
-    often it was in. This holds the second fixed.
+    A strategy invested 22% of the time forfeits most of the market drift
+    whatever it selects, so comparing its Sharpe against buy-and-hold confounds
+    how well it chose with how often it was in. Shuffling the position series
+    keeps the count and destroys which bars they were, so the gap between this
+    and the real Sharpe is the selection ability.
 
-    The position series is shuffled, which keeps the count of held bars exactly
-    and destroys which ones they were. Averaged over `n_draws` shuffles, the
-    result is what a strategy with this exposure and no selection skill would
-    score. The difference between the real Sharpe and this is the selection
-    ability, with the exposure effect divided out.
-
-    Buy-and-hold is the sanity check: at ~100% exposure there is nothing to
-    shuffle, so its real and matched Sharpes agree to three decimals. They do.
+    Buy-and-hold is the check: at ~100% exposure there is nothing to shuffle
+    and the two agree.
 
     Returns (mean, sd) across draws, annualised like `sharpe`.
     """

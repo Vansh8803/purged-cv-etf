@@ -1,26 +1,15 @@
-"""Step 7: turning a classifier's output into a position series, and costing it.
+"""Predictions into positions, and positions into costed returns.
 
-Vectorised, at daily frequency, long or flat only. An event-driven backtester
-would buy nothing here: at one bar per day there is no queue, no partial fill
-and no intraday path to simulate, and the vectorised form is far easier to
-audit line by line. The long-or-flat restriction was decided on 2026-10-14 --
-shorting brings borrow costs we cannot model honestly.
+Vectorised, daily, long or flat. We do not short, since borrow costs are not
+something we can model honestly.
 
-**The holding period comes from the label, not from a fixed horizon.** A
-prediction made at the close of day *t* opens a position on the next bar and
-holds it until that label resolves on `t1`, which is the barrier touch or the
-ten-bar timeout. That is deliberate: the model was trained to answer "does the
-upper barrier fall first", so the trade the backtest runs has to be the trade
-the label scores. Holding for a fixed ten days instead would measure something
-the model was never asked about.
+A signal at the close of *t* opens on the next bar and holds until the label
+resolves at `t1`. The model was trained to answer "does the upper barrier fall
+first", so the backtest runs that trade rather than a fixed ten-day hold.
 
-**Overlapping signals do not stack.** Labels overlap by construction -- that is
-the entire subject of this project -- so on most bars several predictions are
-live at once. Position is capped at one unit, so the strategy is "in or out"
-rather than "in up to nine times", which keeps leverage constant and makes
-turnover mean what it says. The cost of this is that a strong run of signals
-looks the same as a single one; the benefit is that no number here depends on a
-position-sizing rule nobody has justified.
+Overlapping signals do not stack: position is capped at one unit, so we are in
+or out. Otherwise leverage would depend on signal density and turnover would
+mean nothing.
 """
 
 import numpy as np
@@ -28,18 +17,13 @@ import pandas as pd
 
 
 def positions(signal, t1, bar_index):
-    """Binary position series over `bar_index`, from act/don't-act predictions.
+    """Binary position series over `bar_index`.
 
-    `signal` is indexed by the bar the prediction is made on and is truthy where
-    the model says act. `t1` is the matching resolution date for each of those
-    rows.
+    `signal` is indexed by the bar the prediction is made on and is truthy
+    where the model says act; `t1` gives each of those rows its resolution
+    bar. A signal on *t* holds over `(t, t1]`.
 
-    A signal on *t* holds the position over `(t, t1]` -- opened on the bar after
-    the decision, closed on the bar the label resolves. Opening on *t* itself
-    would be the classic lookahead: acting on a close at that same close.
-
-    Built with a difference array so it stays O(bars) rather than O(signals x
-    bars), and capped at one unit.
+    Difference array, so this is O(bars) rather than O(signals x bars).
     """
     bar_index = pd.DatetimeIndex(bar_index)
     acted = pd.Series(signal).astype(bool)
@@ -50,9 +34,8 @@ def positions(signal, t1, bar_index):
     opened = pd.DatetimeIndex(acted.index)
     closed = pd.DatetimeIndex(t1.loc[acted.index].to_numpy())
 
-    # `bar_index` is the trading calendar, not the surviving rows. A kept row's
-    # t1 can land on a bar that was itself purged, so passing the row index
-    # instead silently shortens the calendar -- say so rather than run off it.
+    # `bar_index` must be the trading calendar, not the surviving rows: a kept
+    # row's t1 can land on a bar that was itself dropped.
     end = bar_index.searchsorted(closed)
     if (end >= len(bar_index)).any() or not (bar_index[end] == closed).all():
         raise ValueError("some t1 dates are not bars in bar_index; pass the "
@@ -69,20 +52,14 @@ def positions(signal, t1, bar_index):
 
 
 def backtest(position, log_return, cost_bps=0.0):
-    """Daily net returns, equity curve and turnover for one position series.
+    """Daily net returns, equity and turnover for one position series.
 
-    Costs are charged on *changes* in position, which is where they are
-    actually incurred, at `cost_bps` basis points of the traded notional each
-    way. A strategy that works at zero cost and not at five is not a strategy,
-    which is why cost is a parameter here rather than a constant.
+    Costs are charged on *changes* in position at `cost_bps` each way. Cost is
+    a parameter rather than a constant because a strategy that works at zero
+    and not at five is not a strategy.
 
-    Works in simple returns rather than log. Log returns add across time, which
-    is why the features use them, but a cost is a multiplicative haircut on the
-    way in and out, and mixing the two is a quiet source of error. The equity
-    curve is the exact compounding of what the strategy earned.
-
-    Returns a frame indexed by bar: position, net return, equity, and the
-    traded amount on each bar.
+    Simple returns, not log: a cost is a multiplicative haircut in and out, and
+    mixing the two is a quiet source of error.
     """
     simple = np.expm1(pd.Series(log_return).reindex(position.index).fillna(0.0))
 
@@ -100,17 +77,15 @@ def backtest(position, log_return, cost_bps=0.0):
 
 
 def turnover(traded, periods=252):
-    """Annualised round-trip turnover: how much the strategy trades.
+    """Annualised turnover, counting each leg.
 
-    Reported because it is what the headline hides. Two strategies with the
-    same Sharpe before costs are not the same strategy if one of them trades
-    ten times as often, and at daily frequency turnover rather than signal
-    quality usually decides whether anything survives the spread.
+    We report it because two strategies with the same gross Sharpe are not the
+    same strategy if one trades ten times as often.
     """
     return float(np.asarray(traded).mean() * periods)
 
 
 def exposure(position):
-    """Share of bars actually held. Sharpe on 10% exposure is a different
-    claim from Sharpe on 100%, the same way precision needs its coverage."""
+    """Share of bars held. Sharpe at 10% exposure is a different claim from
+    Sharpe at 100%, the same way precision needs its coverage."""
     return float(np.asarray(position).mean())

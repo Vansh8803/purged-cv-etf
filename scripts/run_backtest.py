@@ -92,7 +92,7 @@ def main() -> int:
 
     out = pd.DataFrame(rows)
 
-    # --- Step 9. The trial distribution is the spread of per-period Sharpes
+    # --- The trial distribution is the spread of per-period Sharpes
     # across the configurations actually tried: five models, which is the trial
     # counter in decision-log.md. Schemes are measurements of the same model, so
     # they do not multiply it, and each ticker has its own model and its own

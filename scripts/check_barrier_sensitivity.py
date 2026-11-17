@@ -8,8 +8,8 @@ single bar, label windows barely overlapped, and the comparison this whole
 project is built on would have had nothing to measure. This script asks what
 that choice cost or gained us in predictive terms.
 
-**Raw AUC is not comparable across widths**, which is the whole reason this
-needs care. The no-signal floor moves with the width. Wide barriers time out
+Raw AUC is not comparable across widths, because the no-signal floor moves
+with the width. Wide barriers time out
 more often, a timeout counts as label 0, and trailing volatility predicts
 timeouts — so a model with no skill at all scores higher when the barriers are
 wider. Comparing AUC at 1.0 against AUC at 2.5 would mostly be comparing two
@@ -19,11 +19,10 @@ So for every width we measure both: the real AUC, and the floor at that same
 width from the sign-flip null, where each daily return keeps its magnitude and
 gets a random sign. The quantity that means anything is the gap between them.
 
-**Nothing here may change the barrier width.** The holdout was opened on
-2026-11-15, and our own rule is that nothing upstream of that may move on the
-strength of anything measured afterwards. This is a sensitivity analysis for
-the limitations section, not a search for a better setting, which is also why
-it does not touch the trial counter.
+Nothing here may change the barrier width. The holdout was opened on
+2026-11-15, and our rule is that nothing upstream of it moves on the strength
+of anything measured since. This is a sensitivity analysis, not a search for a
+better setting, which is also why it does not touch the trial counter.
 
 Pre-holdout rows only. This does not read 2023-2025.
 """

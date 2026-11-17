@@ -1,4 +1,4 @@
-"""Step 11: the precomputed grid the site reads.
+"""The precomputed grid the site reads.
 
     python scripts/build_site_data.py
 
@@ -15,9 +15,7 @@ precomputation at all.
 **Run-length encoding.** A position series is 4,312 zeros and ones, but it is
 blocky: a position is held for about six bars, so a series has only a few
 hundred runs. Storing run lengths instead of bars is about six times smaller
-and trivial to decode. The whole grid comes to a few hundred kilobytes, small
-enough to inline into one self-contained HTML file -- which matters more than
-elegance for something that has to work during a viva with no server running.
+and trivial to decode. The whole grid comes to a few hundred kilobytes.
 
 **Execution lag is a one-bar delay, not a next-open fill.** The spec says
 "same-bar or next-open". Doing next-open honestly needs open-to-close returns

@@ -1,9 +1,9 @@
-"""Step 6: score every model under every scheme, per ticker.
+"""Score every model under every scheme, per ticker.
 
     python scripts/run_models.py
 
 Reads data/processed/{ticker}_labelled.csv, writes outputs/step06_scores.csv,
-and prints the comparison the write-up is built on.
+and prints the model comparison.
 
 Pre-holdout rows only, and *purged* against the holdout rather than merely
 filtered by date -- a row dated December 2022 whose label resolves in January

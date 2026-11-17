@@ -1,4 +1,4 @@
-"""Step 13. Open the holdout. Once.
+"""Open the holdout. Once.
 
     python scripts/open_holdout.py
 
@@ -59,7 +59,7 @@ def main() -> int:
     OUT.mkdir(exist_ok=True)
     rows, net_returns = [], {}
 
-    print("STEP 13 — OPENING THE HOLDOUT")
+    print("OPENING THE HOLDOUT")
     print(f"Declared {start.date()} to {end.date()} in config.yaml on 2026-10-14.")
     print("Each model fitted once on the purged pre-holdout rows. Nothing tuned.\n")
 
@@ -121,8 +121,8 @@ def main() -> int:
 
     out = pd.DataFrame(rows)
 
-    # Deflated Sharpe, same construction as step 9: the spread of per-period
-    # Sharpes across the five models actually tried, per ticker and per cost.
+    # Deflated Sharpe from the spread of per-period Sharpes across the five
+    # models we tried, per ticker and per cost.
     sr_std = (out.groupby("ticker")["sharpe_0bps"].std(ddof=1)
               .div(np.sqrt(252)).to_dict())
     out["dsr_0bps"] = [

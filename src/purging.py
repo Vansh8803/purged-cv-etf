@@ -1,27 +1,18 @@
-"""The overlap test the whole project turns on, written once.
+"""The overlap rule, written once.
 
-Three different places hold data back and every one of them has to ask the same
-question: given a block of bars we are about to test on, which rows are still
-safe to train on? PurgedKFold (step 3), the walk-forward splitter (step 4) and
-the holdout boundary (step 13) all call `purge_mask` rather than each
-implementing the rule, because three slightly different versions of the one
-idea the project is about is the worst outcome available to us.
+PurgedKFold, the walk-forward splitter and the holdout boundary all need the
+same answer: given a block of bars we are about to test on, which rows are
+still safe to train on? They all call `purge_mask` so the three cannot drift
+apart.
 
-Everything here is defined on label windows [t, t1], never on row order.
-Shuffling is not what breaks ordinary K-fold on this data; the overlap in the
-label windows is, and it leaks across a fold boundary whether or not the rows
-were shuffled.
+Everything here works on label windows [t, t1], never on row order.
 """
 
 import pandas as pd
 
 
 def _bar_position(bar_index, date, what):
-    """Integer position of `date` on `bar_index`, or a clear error.
-
-    Length in bars is only meaningful against the trading calendar, so a date
-    that is not a bar is a bug in the caller rather than something to round.
-    """
+    """Integer position of `date` on `bar_index`. Raises if it is not a bar."""
     bar_index = pd.DatetimeIndex(bar_index)
     pos = int(bar_index.searchsorted(pd.Timestamp(date)))
     if pos >= len(bar_index) or bar_index[pos] != pd.Timestamp(date):
@@ -30,31 +21,20 @@ def _bar_position(bar_index, date, what):
 
 
 def embargo_bars(n_bars, frac):
-    """Embargo length in bars, from `embargo_frac` in config.yaml.
-
-    config states the embargo as a fraction of the sample rather than a bar
-    count so that it scales with however much data a given run has. The
-    sensitivity sweep overrides it with explicit bar counts from 0 to 20.
-    """
+    """Embargo length in bars from `embargo_frac`, so it scales with the sample."""
     return int(round(n_bars * frac))
 
 
 def block_span(test_t1):
-    """The stretch of bars a test block actually occupies.
+    """The stretch of bars a test block occupies: (first t, largest t1).
 
-    Not [first test row, last test row]. A test label resolves up to `horizon`
-    bars after its own row, so the block's reach is its last *resolution* date.
-    Measuring the span by row dates alone leaves a gap: a training row starting
-    between the final test row and that resolution date has a label window
-    overlapping a test label, and would survive the purge while knowing part of
-    the answer. Taking the maximum t1 closes it.
+    Not the last row's date. A test label resolves up to `horizon` bars after
+    its own row, so the block reaches past its final row, and a training row
+    starting in that tail would survive a purge measured on row dates alone.
 
-    `test_t1` is the t1 Series restricted to the test rows. It need not be
-    sorted: the span is taken from the minimum start and the maximum t1, not
-    from the first and last elements. PurgedKFold always hands over a sorted
-    contiguous block, but a shuffled control would not, and a span starting at
-    whichever row happened to come first would begin after some of its own test
-    rows and under-purge everything before it.
+    `test_t1` need not be sorted. t1 is not monotonic, so the span comes from
+    the minimum start and the maximum t1 rather than the first and last
+    elements.
     """
     if len(test_t1) == 0:
         raise ValueError("test block is empty")
@@ -62,38 +42,20 @@ def block_span(test_t1):
 
 
 def purge_mask(t1, test_start, test_end, bar_index=None, embargo=0):
-    """Rows safe to train on, given a test block spanning [test_start, test_end].
+    """Rows safe to train on, given a test block over [test_start, test_end].
 
-    Both rules come straight from project_details.md.
+    Purge: drop row i when its window [t_i, t1_i] overlaps the test span,
+    which is `t1_i >= test_start and t_i <= test_end`.
 
-    **Purge.** Drop row i when its label window [t_i, t1_i] overlaps the test
-    span at all, which is `t1_i >= test_start and t_i <= test_end`. A row whose
-    outcome is still unresolved when the test period opens has been shown part
-    of the outcome it is about to be scored against.
+    Embargo: also drop rows starting in `(test_end, test_end + embargo]`,
+    exclusive at the start because test_end is already purged above. Our
+    features use 20-day rolling windows, so a row just after the block
+    computes its features partly from bars inside it.
 
-    **Embargo.** Additionally drop rows starting in
-    `(test_end, test_end + embargo]` bars -- exclusive at the start, because
-    test_end is already purged by the rule above, and inclusive at the end.
-    Two reasons, and the second is the concrete one: prices are serially
-    correlated, and the 20-day feature windows of a row just after the test
-    block are computed from bars inside it. Such a row carries information
-    about the test period even though its label window does not overlap it.
+    `bar_index` is required when `embargo > 0`, since the embargo is a length
+    in trading bars and the label dates alone do not pin down the calendar.
 
-    `bar_index` is required when `embargo > 0`, since the embargo is a length in
-    trading bars and the label dates alone do not pin the calendar down. It is
-    passed explicitly for the same reason src/uniqueness.py demands it.
-
-    Returns a boolean Series over `t1.index`: True means keep for training.
-
-    The three callers differ only in what they pass:
-
-    - PurgedKFold: `block_span()` of each fold, plus the embargo.
-    - Walk-forward: `block_span()` of each forward block. Nothing trains on
-      anything later, so the embargo only matters for the expanding window.
-    - The holdout: `test_start` = holdout_start and `test_end` = the last bar,
-      with no embargo, since nothing comes after the holdout. This is the purge
-      that stops a December 2022 row whose label resolves in January 2023 from
-      sitting in the training set.
+    Returns a boolean Series over `t1.index`; True means keep for training.
     """
     if t1.isna().any():
         raise ValueError("t1 contains NaT; unresolved rows must be dropped first")
@@ -105,7 +67,6 @@ def purge_mask(t1, test_start, test_end, bar_index=None, embargo=0):
     if test_end < test_start:
         raise ValueError("test_end precedes test_start")
 
-    # Interval overlap, both ends inclusive.
     keep = ~((ends >= test_start) & (starts <= test_end))
 
     if embargo > 0:
@@ -113,20 +74,19 @@ def purge_mask(t1, test_start, test_end, bar_index=None, embargo=0):
             raise ValueError("bar_index is required when embargo > 0")
         bar_index = pd.DatetimeIndex(bar_index)
         end_pos = _bar_position(bar_index, test_end, "test_end")
-        # Clipped, so a test block at the very end of the sample embargoes
-        # whatever bars remain rather than running off the calendar.
+        # Clipped, so a block at the end of the sample embargoes what is left
+        # rather than running off the calendar.
         last = min(end_pos + embargo, len(bar_index) - 1)
-        embargoed = (starts > test_end) & (starts <= bar_index[last])
-        keep &= ~embargoed
+        keep &= ~((starts > test_end) & (starts <= bar_index[last]))
 
     return pd.Series(keep, index=t1.index, name="train")
 
 
 def purged_holdout_mask(t1, holdout_start, bar_index):
-    """Training rows that are safe given an untouched holdout from `holdout_start`.
+    """Training rows that are safe given an untouched holdout.
 
-    The same purge as everywhere else, with the test block being the holdout
-    itself. Named separately only because step 13 reads better for it.
+    The same purge with the holdout as the test block, which is what stops a
+    December row whose label resolves in January from reaching training.
     """
     bar_index = pd.DatetimeIndex(bar_index)
     return purge_mask(t1, holdout_start, bar_index[-1], bar_index, embargo=0)

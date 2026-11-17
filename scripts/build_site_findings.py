@@ -95,7 +95,7 @@ def main() -> int:
                      "last": str(lab.index.max().date())})
     f["data"] = rows
 
-    # --- step 2, from the tested module
+    # --- uniqueness, from the tested module
     from src.features import load_labelled, pre_holdout
     from src.uniqueness import average_uniqueness, effective_sample_size
     uq = []
@@ -110,7 +110,7 @@ def main() -> int:
                    "effective_n": int(round(effective_sample_size(pre["t1"], bars)))})
     f["uniqueness"] = uq
 
-    # --- step 6
+    # --- model scores
     s6 = read("step06_scores.csv")
     if s6 is not None:
         f["auc"] = rounded(s6.pivot_table(index="model", columns="scheme",
@@ -142,7 +142,7 @@ def main() -> int:
                 .apply(lambda s: s.std(ddof=1) / np.sqrt(len(s))),
         }).loc[ORDER], 6)
 
-    # --- steps 7 to 9
+    # --- strategy results
     bt = read("step789_backtest.csv")
     if bt is not None:
         z = bt[bt.cost_bps == 0].groupby("model")
@@ -174,7 +174,7 @@ def main() -> int:
                             values="realised_return", aggfunc="size",
                             observed=True), 0)
 
-    # --- step 13
+    # --- holdout
     hd = read("step13_holdout.csv")
     if hd is not None:
         hd["edge"] = hd["sharpe_0bps"] - hd["sharpe_matched_0bps"]
@@ -198,9 +198,9 @@ def main() -> int:
                 hd[hd.model == "buy_and_hold"].set_index("ticker")[["total_return_0bps"]], 3),
         }
 
-    # --- a real slice of SPY, so the site can let you explore the label
-    # instead of describing it. June 2007 to June 2009 on purpose: it starts
-    # calm and ends in the crisis, so the barriers visibly widen.
+    # A real slice of SPY so the site can show the label rather than describe
+    # it. June 2007 to June 2009 starts calm and ends in the crisis, so the
+    # barriers visibly widen.
     lab = pd.read_csv(ROOT / "data" / "processed" / "SPY_labelled.csv",
                       index_col="Date", parse_dates=True)
     lab["t1"] = pd.to_datetime(lab["t1"])

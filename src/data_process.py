@@ -7,50 +7,50 @@ import yaml
 ROOT = Path(__file__).resolve().parents[1]
 
 def engineer_features(df):
-    # 1. Price Adjustments (from your Oct 24 decision)
+    """Add the ten features, shifted one bar, and drop the warm-up rows."""
+    # Scale the intraday high and low by the same factor as Adj Close, so a
+    # dividend drop cannot look like a barrier touch.
     adj_factor = df['Adj Close'] / df['Close']
     df['adj_high'] = df['High'] * adj_factor
     df['adj_low'] = df['Low'] * adj_factor
-    
-    # Base return calculation
+
     df['log_return'] = np.log(df['Adj Close'] / df['Adj Close'].shift(1))
-    
-    # 2. Spec Features: Trailing returns (1, 5, 10, 20 days)
+
+    # Trailing returns
     for window in [1, 5, 10, 20]:
         df[f'ret_{window}d'] = df['log_return'].rolling(window=window).sum()
-        
-    # 3. Spec Features: Realized volatility & Vol of Vol
+
+    # Realised volatility, and the volatility of that
     df['realized_vol_20d'] = df['log_return'].rolling(window=20).std()
     df['vol_of_vol_20d'] = df['realized_vol_20d'].rolling(window=20).std()
-    
-    # 4. Spec Features: Distance from MA (20, 50, 200 days)
+
+    # Distance from the moving averages
     for window in [20, 50, 200]:
         ma = df['Adj Close'].rolling(window=window).mean()
         df[f'dist_ma_{window}d'] = (df['Adj Close'] - ma) / ma
-        
-    # 5. Spec Features: Volume z-score (20-day rolling)
+
+    # Volume against its own 20-day mean and spread
     vol_mean = df['Volume'].rolling(window=20).mean()
     vol_std = df['Volume'].rolling(window=20).std()
     df['vol_zscore_20d'] = (df['Volume'] - vol_mean) / vol_std
-    
-    # 6. CRITICAL SPEC RULE: Shift features one bar
-    # "All computed from information available on or before day t, 
-    # then shifted one bar before the model sees them."
+
+    # Shift every feature one bar, so row t holds values computed up to
+    # t-1. The raw bars, log_return and the adjusted high/low stay
+    # unshifted: the label needs them at t.
     feature_cols = [c for c in df.columns if c not in ['Open', 'High', 'Low', 'Close', 'Adj Close', 'Volume', 'adj_high', 'adj_low', 'log_return']]
-    
-    # We shift the features forward by 1 so that row 't' contains the features calculated up to 't-1'
+
     df[feature_cols] = df[feature_cols].shift(1)
-    
-    # Drop the massive 200-day NaN hole at the start of the dataframe caused by the 200d MA
+
+    # Drops the 200-row warm-up the longest moving average needs.
     df = df.dropna().copy()
-    
+
     return df
 
 def latest_raw(ticker):
     """Newest cached download for a ticker.
 
-    download_data.py --force writes a NEW date-stamped file rather than
-    overwriting the old one, so the stamp cannot be hard-coded here.
+    `download_data.py --force` writes a new date-stamped file rather than
+    overwriting, so the stamp cannot be hard-coded.
     """
     matches = sorted((ROOT / "data" / "raw").glob(f"{ticker}_*.csv"))
     return matches[-1] if matches else None

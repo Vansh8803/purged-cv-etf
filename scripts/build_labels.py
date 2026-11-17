@@ -5,8 +5,8 @@ Reads data/processed/{ticker}_features.csv, adds sigma, the two barrier levels,
 
     python scripts/build_labels.py
 
-Every parameter comes from config.yaml so the labels and the write-up cannot
-drift apart.
+Every parameter comes from config.yaml, so the labels and what we report
+cannot drift apart.
 
 The holdout is labelled along with everything else -- it has to be, or the rows
 just before it would lose their forward window -- but the summary printed below

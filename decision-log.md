@@ -497,17 +497,24 @@ from 0 to 20 bars, or the barrier width — measures how stable one configuratio
 is, and we report the range rather than picking from it. If anyone ever selects
 a setting on those numbers, the counter moves and this entry is wrong.
 
-### 2026-11-15 · The sign-flip floor is measured but not adopted
+### 2026-11-15 · We keep the synthetic floor of 0.544
 
 We measured the no-signal floor a second way, on real bars, by randomising the
 sign of each daily return. That keeps the volatility path intact — rolling
 sigma correlates 0.998 with the real one — while destroying all directional
 information. It gives 0.529 against the synthetic 0.544.
 
-We have not adopted it. The synthetic figure is conservative, so nothing we
-reported was flattered by the difference, and switching the headline floor
-needs both of us to agree. `scripts/check_floor_real.py` prints it; the open
-question below records that it is unresolved.
+The sign-flip number is the better measurement: real feature distribution, real
+sample size, per ticker, and a tighter standard error. We are still reporting
+against 0.544.
+
+The reason is that 0.529 is the number that flatters us. It would raise
+logistic's lift from +0.031 to +0.046, and we would be adopting it after the
+holdout was open. The measurement predates the holdout, so we could defend the
+timing, but a project about not fooling yourself should not swap in a more
+generous baseline at the end. The synthetic floor errs against us, which is the
+direction we want to err. `scripts/check_floor_real.py` prints the alternative
+for anyone who wants to check.
 
 ### 2026-11-15 · The site ships position series, not equity curves
 
@@ -520,6 +527,12 @@ lag arithmetically. The whole grid is 475 KB.
 honest open fill needs open-to-close returns threaded through the entry bar,
 which cannot be done as arithmetic on a position series. A delay is a real cost
 of being late, but it is not the same thing, and the page says so.
+
+**The Deflated Sharpe Ratio is shown as a fixed number, not recomputed per
+slider position.** It depends on the total trial count, which is a property of
+the whole search rather than of one configuration, so a DSR that moved with a
+slider would be wrong. The per-configuration Sharpe is live; the DSR sits in
+the results tables.
 
 Putting the backtest in JavaScript means the same arithmetic now exists twice.
 `scripts/check_site_data.py` ports it back into Python and fails if the two
@@ -559,16 +572,3 @@ now would mean choosing a configuration after seeing holdout results.
 It does mean the 2.5 we chose for unrelated reasons sits near the top of the
 achievable lift without paying 3.0's cost in sample size. That is luck rather
 than judgement and the write-up should say so.
-
----
-## Open questions
-
-Move these into the log as dated entries once decided.
-
-- **Adopt the sign-flip floor of 0.529 in place of the synthetic 0.544?**
-  Needs Aksh. It is better calibrated and per ticker, and it raises
-  logistic's lift from +0.032 to +0.047. `scripts/check_floor_real.py`
-  prints it; wiring it in is a one-line change to `NO_SIGNAL_FLOOR`.
-- **Is the DSR a live number or a fixed one?** It depends on the total trial
-  count, which is a property of the whole project, not of a slider position.
-  Probably display it fixed, with the per-configuration Sharpe live.

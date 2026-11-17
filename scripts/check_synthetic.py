@@ -1,4 +1,4 @@
-"""Step 10: run the whole machinery on data whose answer we already know.
+"""Run the whole machinery on data whose answer we already know.
 
     python scripts/check_synthetic.py
 
@@ -91,7 +91,7 @@ def line(label, stats):
 
 def main() -> int:
     cfg = yaml.safe_load((ROOT / "config.yaml").read_text())
-    print("Step 10: synthetic-signal check")
+    print("Synthetic-signal check")
     print(f"barrier_mult={cfg['label']['barrier_mult']}  horizon={cfg['label']['horizon_days']}  "
           f"folds={cfg['split']['n_folds']}  {N_SEEDS} seeds\n")
     print(f"  {'':<42}{'mean':>7}{'sd':>8}{'min':>8}{'max':>8}")

@@ -1,24 +1,17 @@
-"""Step 6: the models, and the rules they have to beat.
+"""The five models, and the rules they have to beat.
 
-All five predict the same binary target -- did the upper barrier fall first --
-so precision and AUC mean the same thing in every row of the comparison. That
-was settled on 2026-10-14, when the draft had some models predicting three
-classes and some two, which makes a side-by-side table meaningless.
+All five predict the same binary target, so precision and AUC mean the same
+thing in every row of the comparison.
 
-Two of the five are not fitted at all. A rule dressed as a classifier is scored
-through exactly the same code path as a learned one, which is the only way the
-comparison is like for like: same folds, same test rows, same metric, same
-purging. `buy_and_hold` acts every day and is the "never skip" reference;
-`ma_crossover` is the baseline from the proposal, and beating it or failing to
-is informative either way.
+Two of them are not fitted at all. Dressing a rule as a classifier lets it go
+through the same scoring path as a learned model -- same folds, same test rows,
+same metric, same purging -- which is the only way the comparison is like for
+like.
 
-**Scaling and the rules.** The learned models sit behind `make_pipeline`, which
-standardises each column independently. The crossover rule compares two
-different columns to each other, and standardising them separately does not
-preserve that comparison -- each gets its own mean and standard deviation. So
-the rules read the raw design matrix and are deliberately not wrapped in the
-pipeline. They need no imputation or scaling: they are a comparison of two
-numbers that are either both present or both absent.
+The rules read the raw design matrix rather than the scaled pipeline.
+Standardising gives each column its own mean and standard deviation, which does
+not preserve a comparison *between* two columns, and the crossover is exactly
+that comparison.
 """
 
 import numpy as np
@@ -31,34 +24,30 @@ from src.features import make_pipeline
 
 
 def crossover_signal(X):
-    """True where the 20-day moving average sits above the 50-day one.
+    """True where the 20-day moving average sits above the 50-day.
 
     Read off the distance-from-MA features rather than recomputed from price,
-    so the rule inherits the same one-bar shift as every other feature and
-    cannot act on a number before it existed. The proposal's "applied with a
-    one-bar lag" is therefore structural here rather than something to remember.
+    so the rule inherits the same one-bar shift as everything else and the lag
+    is structural rather than something to remember.
 
-    The algebra, because it reads backwards. With `d20 = (C - MA20) / MA20`,
-    we have `MA20 = C / (1 + d20)`, and likewise for 50. Price is positive and
-    so is every moving average, so `1 + d` is positive and
+    Watch the direction. With `d20 = (C - MA20) / MA20` we have
+    `MA20 = C / (1 + d20)`, and since price and every average are positive:
 
         MA20 > MA50  <=>  C / (1 + d20) > C / (1 + d50)  <=>  d20 < d50.
 
-    The inequality flips. A rule written the intuitive way round would be the
-    exact opposite of a golden cross, which is the kind of error that still
-    produces a plausible-looking score.
+    The inequality flips. Written the intuitive way round this would be a death
+    cross and would still produce a plausible score.
     """
     return (X["dist_ma_20d"] < X["dist_ma_50d"]).to_numpy()
 
 
 class _Rule(BaseEstimator, ClassifierMixin):
-    """A deterministic rule with the estimator interface, so it is scored
-    through the same `cross_val_scores` as everything else.
+    """A deterministic rule wearing the estimator interface.
 
-    `fit` ignores its training data on purpose. That is not laziness: it is what
-    makes these the reference points. A rule cannot leak, cannot overfit, and
-    scores identically under every scheme, so any difference a learned model
-    shows between the control and the purged run is the learning, not the data.
+    `fit` ignores its training data on purpose, which is what makes these
+    reference points: a rule cannot leak or overfit and scores identically
+    under every scheme, so any control-versus-purged difference a learned model
+    shows is the learning rather than the data.
     """
 
     def fit(self, X, y=None):
@@ -74,11 +63,11 @@ class _Rule(BaseEstimator, ClassifierMixin):
 
 
 class AlwaysAct(_Rule):
-    """Buy and hold, expressed as a classifier: act on every bar.
+    """Buy and hold as a classifier: act on every bar.
 
-    Its precision is the positive rate by construction, which is exactly the
-    number every other model's precision has to be read against. Its AUC is 0.5
-    because it never discriminates.
+    Its precision is the positive rate by construction, which is the number
+    every other precision is read against. Its AUC is 0.5, since it never
+    discriminates.
     """
 
     def _signal(self, X):
@@ -93,19 +82,18 @@ class MACrossover(_Rule):
 
 
 class MetaLabel(BaseEstimator, ClassifierMixin):
-    """The crossover picks the direction; the model only decides whether to act.
+    """The crossover picks direction; the model decides whether to act.
 
-    Asking which way price will move is close to hopeless on daily bars. Asking
-    whether to take a signal somebody else generated is a binary question on a
-    smaller, more homogeneous sample, and precision on it means something.
+    Which way price will move is close to hopeless on daily bars. Whether to
+    take a signal somebody else generated is a narrower question on a smaller,
+    more homogeneous sample.
 
-    Trained only on the rows where the rule fires, and predicts 0 everywhere
-    else, so it can never act where the rule would not have. That is the point
-    of the construction and the test suite pins it.
+    Trained only on rows where the rule fires and predicts 0 everywhere else,
+    so it can never act where the rule would not have.
 
-    A fold where the rule never fires, or fires only on one class, leaves
-    nothing to learn from. Rather than crash or quietly fit a degenerate model,
-    it falls back to predicting 0 and records that in `fitted_`.
+    A fold where the rule never fires, or fires on one class only, leaves
+    nothing to learn. Rather than crash or fit something degenerate it falls
+    back to predicting 0 and records that in `fitted_`.
     """
 
     def __init__(self, inner=None, min_train=30):
@@ -146,14 +134,13 @@ class MetaLabel(BaseEstimator, ClassifierMixin):
 
 
 def model_zoo(seed):
-    """The five models of project_details.md, simplest first.
+    """The five models, simplest first.
 
     No hyperparameter search. The effective sample is roughly 660 observations
-    per ticker, a grid would multiply the trial counter the Deflated Sharpe
-    Ratio depends on, and the 2026-11-10 scope decision says one number per
-    question. The settings below are fixed, deliberately conservative, and
-    chosen for the sample size rather than tuned on it -- which is why they are
-    a stated choice rather than a search result.
+    per ticker, and a grid would multiply the trial count the Deflated Sharpe
+    Ratio depends on. These settings are fixed and chosen for the sample size
+    rather than tuned on it, so they are a stated choice rather than a search
+    result.
     """
     return {
         "buy_and_hold": AlwaysAct(),
@@ -162,9 +149,8 @@ def model_zoo(seed):
             LogisticRegression(max_iter=1000, random_state=seed)
         ),
         "gbt": make_pipeline(HistGradientBoostingClassifier(
-            # Capacity held down on purpose: ~660 effective observations is the
-            # binding constraint, not model class. Shallow trees, a big leaf
-            # floor and explicit L2 are all the same decision.
+            # Capacity held down on purpose: ~660 effective observations is
+            # the binding constraint, not model class.
             max_leaf_nodes=7,
             min_samples_leaf=50,
             learning_rate=0.05,

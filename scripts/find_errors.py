@@ -12,13 +12,13 @@ model had genuinely not been trained on.
 
 Three things get reported, because a list of bad days on its own is an anecdote:
 
-1. **How often it is wrong when it acts**, against the rate you would get by
-   acting every day. That is the only honest baseline for precision.
+1. **How often it is wrong when it acts**, against the rate we would get by
+   acting every day, which is the only honest baseline for precision.
 2. **The worst individual errors**, with the date, what the model saw, and what
    the price then did. These are the cases to be able to talk about.
-3. **When it fails** -- whether errors concentrate in particular volatility or
-   trend conditions. This is the part that turns the list into a finding, and
-   it is what the write-up can actually say something with.
+3. **When it fails** -- whether errors concentrate in particular volatility
+   or trend conditions. This is the part that turns a list of bad days into
+   something we can say.
 
 Pre-holdout rows only, purged against the holdout. Nothing here reads 2023-2025.
 """

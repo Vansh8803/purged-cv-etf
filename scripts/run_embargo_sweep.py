@@ -13,7 +13,7 @@ Two outputs, because one fitting pass serves both:
 - `outputs/embargo_sweep.csv`: per-fold AUC for every
   (ticker, model, scheme, embargo), and the paired gap against the control.
 - `outputs/positions_<ticker>.csv`: the position series the site needs at
-  step 11, one column per (model, scheme, embargo). Shipping positions rather
+  the site, one column per (model, scheme, embargo). Shipping positions rather
   than equity curves is the decision recorded on 2026-10-14 -- cost and
   execution lag are arithmetic the browser can do, so they do not belong in a
   precomputed cross.
