@@ -252,7 +252,7 @@
     much a careless backtest flatters itself depends on <b>how you cut the folds</b>, not on
     whether you purge. We cut ours as blocks of time, which leaks 0.33% of training rows, so
     purging had almost nothing left to remove.</p>
-    <p>Shuffle the same folds and the leak jumps to 88%. You can try that in §3.</p>
+    <p>Shuffle the same folds and the leak jumps to 88%. You can try that in <a href="#overlap">section 3</a>.</p>
   </div>
 </section>
 
@@ -392,7 +392,7 @@
     — the volatility that <i>sets the barrier width</i>. Handing it over would tell the model how
     far price must travel for the label to fire. The shifted version,
     <code>realized_vol_20d</code>, is the honest one. That exclusion turned out to matter far
-    more than we expected; see the floor in §7.</p>
+    more than we expected; see the floor in <a href="#eval">section 7</a>.</p>
   </div>
 </section>
 
@@ -424,7 +424,7 @@
 
   <p>No neural network, and no hyperparameter search. Settings are fixed and chosen for the
   sample size rather than tuned on it, which keeps our honest trial count at five — the number
-  the Deflated Sharpe Ratio in §11 depends on.</p>
+  the Deflated Sharpe Ratio in <a href="#holdout">section 11</a> depends on.</p>
 </section>
 
 <section id="eval">
