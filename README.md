@@ -2,23 +2,26 @@
 
 ES 335 · pair project · Vansh Dhameliya (25110337), Aksh Hareshkumar Patel (25110017)
 
-We train one model to predict short-term price moves in five ETFs, then score
-that same model, on the same data, under three different cross-validation
-schemes, and report how far apart the three answers are.
+We trained one model to predict short-term price moves in five ETFs, then
+scored that same model, on the same data, under three different
+cross-validation schemes, and measured how far apart the answers came out.
 
-The model is the vehicle. The spread between those numbers is the result.
+We were not trying to find a profitable strategy. We wanted to know how much
+the way you validate a model changes what it appears to be worth.
 
-- **What we are building and why** — [`project_details.md`](project_details.md)
-- **Every decision, dated** — [`decision-log.md`](decision-log.md)
-- **Every tunable parameter** — [`config.yaml`](config.yaml)
+- [`project_details.md`](project_details.md) — what we built and why
+- [`decision-log.md`](decision-log.md) — every decision we made, with its date
+- [`config.yaml`](config.yaml) — every parameter we could have fiddled with
 
-**The website is the submission.** It carries the full reasoning — question,
-data, preprocessing, models, evaluation, results, error analysis and
-limitations — with one interactive panel:
+**Start with the website.** We put the whole argument there — the question,
+the data, what we did to it, the models, how we scored them, what we found and
+what we would not claim — with three things you can poke at rather than just
+read:
 
 - **[vansh8803.github.io/purged-cv-etf](https://vansh8803.github.io/purged-cv-etf/)**
 
-This repository is what lets you verify it. This file says how to run it.
+This repository is how you check that the website is telling the truth. The
+rest of this file explains how to run it.
 
 ---
 

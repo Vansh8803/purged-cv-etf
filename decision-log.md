@@ -1,15 +1,17 @@
 # Decision log
 
-Every choice, surprise and reversal, dated, written as it happens rather than
-reconstructed in November. It feeds three things: the limitations section of
-the write-up, the viva, and the honest trial count that the Deflated Sharpe
-Ratio depends on.
+We write down every choice, surprise and reversal here on the day it happens,
+because by November we would not remember why we did any of it. We use this
+log for three things: the limitations we have to report, answering questions
+about our own work, and keeping an honest count of how many configurations we
+tried, which the Deflated Sharpe Ratio depends on.
 
-**Rules.** One entry per decision, and record the *reason*, not just the
-outcome. If a decision is reversed, add a new entry — never edit an old one.
-Attribute honestly: who decided what, so the viva can be answered by whoever
-is asked. The submission instructions require an AI-use disclosure, which
-lives in the README.
+**How we keep it.** One entry per decision, and we always write down the
+*reason* rather than just what we chose. If we change our minds we add a new
+entry instead of editing the old one, so the reversal stays visible. We say
+who decided what, so either of us can answer for any part of it. Our AI-use
+disclosure lives in the README, which is where the submission instructions ask
+for it.
 
 ---
 

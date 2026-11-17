@@ -37,6 +37,28 @@ ORDER = ["buy_and_hold", "ma_crossover", "logistic", "gbt",
          "meta_crossover_logistic"]
 
 
+def _touches(sl, horizon=10):
+    """Which barrier each day hit first: "upper", "lower" or "timeout".
+
+    Exactly the rule in src/labels.py, including the same-bar tie going to the
+    upper barrier, but run on unrounded prices so the site never has to.
+    """
+    hi, lo = sl["adj_high"].to_numpy(), sl["adj_low"].to_numpy()
+    ub, lb = sl["upper_barrier"].to_numpy(), sl["lower_barrier"].to_numpy()
+    out = []
+    for t in range(len(sl)):
+        hit = "timeout"
+        for k in range(t + 1, min(t + horizon + 1, len(sl))):
+            if hi[k] >= ub[t]:
+                hit = "upper"
+                break
+            if lo[k] <= lb[t]:
+                hit = "lower"
+                break
+        out.append(hit)
+    return out
+
+
 def rounded(df, nd=4):
     """A frame as {index: {column: value}} with NaN turned into None."""
     return json.loads(df.round(nd).to_json(orient="index"))
@@ -175,6 +197,33 @@ def main() -> int:
             "bh_return_by_ticker": rounded(
                 hd[hd.model == "buy_and_hold"].set_index("ticker")[["total_return_0bps"]], 3),
         }
+
+    # --- a real slice of SPY, so the site can let you explore the label
+    # instead of describing it. June 2007 to June 2009 on purpose: it starts
+    # calm and ends in the crisis, so the barriers visibly widen.
+    lab = pd.read_csv(ROOT / "data" / "processed" / "SPY_labelled.csv",
+                      index_col="Date", parse_dates=True)
+    lab["t1"] = pd.to_datetime(lab["t1"])
+    sl = lab.loc["2007-06-01":"2009-06-30"]
+    pos = {d: i for i, d in enumerate(sl.index)}
+    f["label_demo"] = {
+        "ticker": "SPY",
+        "dates": [d.strftime("%Y-%m-%d") for d in sl.index],
+        "close": [round(float(x), 2) for x in sl["Adj Close"]],
+        "high": [round(float(x), 2) for x in sl["adj_high"]],
+        "low": [round(float(x), 2) for x in sl["adj_low"]],
+        "upper": [round(float(x), 2) for x in sl["upper_barrier"]],
+        "lower": [round(float(x), 2) for x in sl["lower_barrier"]],
+        "label": [int(x) for x in sl["label"]],
+        # Resolution as an offset in bars, so the page needs no date maths.
+        "t1_off": [int(pos[t1] - pos[t]) if t1 in pos else -1
+                   for t, t1 in sl["t1"].items()],
+        # Which barrier was hit, worked out here from the exact prices. The
+        # page must not recompute it: the figures above are rounded to two
+        # decimals for size, and on 2008-04-24 that rounding makes a high
+        # equal a barrier it actually missed by a fraction of a cent.
+        "touch": _touches(sl),
+    }
 
     payload["findings"] = f
     data_path.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")

@@ -1,19 +1,23 @@
 # What this project is
 
-A working spec. The README says how to run things; this says what we are
-building and why each piece exists. Keep it current — when something here
-changes, add a dated entry to `decision-log.md` rather than quietly editing
-this file.
+This is our working spec. The README explains how to run the code; here we
+write down what we are building and why each piece of it exists.
+
+We keep it current. When we change something described here, we add a dated
+entry to `decision-log.md` first, so there is always a record of why it
+changed rather than just a file that quietly says something different.
 
 ---
 
 ## The idea
 
 We train a model to predict short-term price moves in five ETFs. Then we score
-that same model, on the same data, three different ways, and report how far
-apart the three answers are.
+that same model, on the same data, three different ways, and measure how far
+apart the answers come out.
 
-The model is the vehicle. The spread between those three numbers is the result.
+We care about that spread rather than about the model itself. If the three
+numbers disagree, then how you validate a model matters a great deal, and we
+want to know by how much.
 
 ## The experiment
 
