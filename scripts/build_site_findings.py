@@ -225,6 +225,13 @@ def main() -> int:
         "touch": _touches(sl),
     }
 
+    # --- barrier-width sensitivity, if it has been run
+    bw = read("barrier_width_sensitivity.csv")
+    if bw is not None:
+        f["barrier_sensitivity"] = rounded(
+            bw.set_index("mult")[["label1", "timeout", "window", "effN",
+                                  "auc", "floor", "lift"]], 4)
+
     payload["findings"] = f
     data_path.write_text(json.dumps(payload, separators=(",", ":")), encoding="utf-8")
     print(f"\nWrote findings into {data_path} "

@@ -1491,6 +1491,67 @@ Recorded because this file's own rule is not to edit old entries, and
 rephrasing attribution across ten of them is an edit even though no decision
 moved.
 
+### 2026-11-17 · Would narrower barriers have scored better? No, the opposite
+
+Vansh asked whether setting the barriers lower would have given us a better
+AUC, and why we had not tried it. We measured it instead of guessing:
+`scripts/check_barrier_sensitivity.py`, logistic under the purged scheme,
+pre-holdout, five funds.
+
+The thing that makes this answerable at all is that **raw AUC is not
+comparable across barrier widths**. The no-signal floor moves with the width:
+wide barriers time out more often, a timeout counts as label 0, and trailing
+volatility predicts timeouts, so a model with no skill whatsoever scores higher
+when the barriers are wider. Comparing AUC at 1.0 against AUC at 2.5 would
+mostly be comparing two different floors. So we measured the floor at every
+width too, from the sign-flip null, and compared the gap.
+
+| width | label 1 | timeout | window | effective N | AUC | floor | lift |
+| --- | --- | --- | --- | --- | --- | --- | --- |
+| 1.0σ | 0.534 | 0.3% | 1.9 bars | 1,575 | 0.5049 | 0.5024 | +0.0025 |
+| 1.5σ | 0.520 | 4.0% | 3.2 bars | 1,128 | 0.5130 | 0.5059 | +0.0071 |
+| 2.0σ | 0.474 | 14.0% | 4.7 bars | 831 | 0.5401 | 0.5108 | +0.0293 |
+| **2.5σ** | 0.405 | 27.4% | 6.0 bars | 662 | 0.5755 | 0.5268 | **+0.0487** |
+| 3.0σ | 0.329 | 41.0% | 7.0 bars | 563 | 0.6030 | 0.5424 | +0.0606 |
+
+**Narrower would have been worse, not better.** At 1.0σ the model scores 0.5049
+against a floor of 0.5024 — a lift of two and a half thousandths, which is
+nothing. The label at that width is close to "which way did tomorrow move", and
+one-day direction is not predictable from anything we have. Our intuition that
+a tighter target is an easier question had it backwards: a tighter target is a
+*noisier* question.
+
+AUC, the floor and the lift all rise monotonically with width. The floor
+confirms the mechanism we found on 2026-11-10 from the other direction: it
+falls from 0.527 at 2.5σ to 0.502 at 1.0σ, because there are almost no timeouts
+left for volatility to predict. It also cross-checks our recorded figure — this
+run puts the 2.5σ floor at 0.5268 against the 0.529 we measured with twice as
+many seeds.
+
+**We are not changing the width, and could not.** 3.0σ shows a slightly larger
+lift, +0.061 against +0.049, for 100 fewer effective observations. The holdout
+was opened on 2026-11-15 and our rule is that nothing upstream of it moves on
+the strength of anything measured afterwards. Switching now would mean picking
+a configuration after seeing holdout results, which is the exact failure this
+project is about.
+
+It does mean the 2.5σ we chose on 2026-11-01, for reasons that had nothing to
+do with accuracy, happens to sit near the top of the achievable lift without
+paying 3.0σ's cost in sample size. That is luck rather than judgement and the
+write-up should say so.
+
+**Trial counter: unchanged, at 5.** Same reasoning as the embargo sweep on
+2026-11-15. This measures how stable one fixed configuration is, and we report
+the range rather than selecting from it — which here is not a matter of
+discipline but of the holdout already being open. If anyone ever does select a
+width on these numbers, the counter moves by 5 and the holdout result is void.
+
+The lift/sd column the script prints is a rough yardstick rather than a
+significance test, since it compares the lift against the spread of the null
+runs and ignores the AUC's own fold-to-fold error. Read loosely, none of these
+lifts is convincingly significant, which is consistent with everything else we
+have found.
+
 ---
 ## Open questions
 

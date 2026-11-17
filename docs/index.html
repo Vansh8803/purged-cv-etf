@@ -15,6 +15,7 @@
     --line:#ddd7c7; --grid:#e6e1d2;
     --accent:#2b4a6f; --soft:#e4eaf1;
     --warn:#9a4327; --warnsoft:#f6e7df;
+    --up:#2d6a4a; --down:#9c2a44;
     --sans:"Archivo",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
     --serif:"Source Serif 4",Georgia,"Times New Roman",serif;
     --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
@@ -181,8 +182,8 @@ Drag through the slider below and watch the barriers widen as 2008 arrives.</p>
   <canvas id="ld-canvas" height="300" aria-label="Price with barriers and resolution"></canvas>
   <div class="legend">
     <span><span class="sw" style="background:var(--ink)"></span>close</span>
-    <span><span class="sw" style="background:var(--accent)"></span>upper barrier</span>
-    <span><span class="sw" style="background:var(--warn)"></span>lower barrier</span>
+    <span><span class="sw" style="background:var(--up)"></span>upper barrier</span>
+    <span><span class="sw" style="background:var(--down)"></span>lower barrier</span>
     <span><span class="sw" style="background:var(--faint)"></span>daily high–low range</span>
   </div>
   <div class="ctl">
@@ -440,8 +441,14 @@ the answer is not clearly yes.</p>
 <li>Our 4,302 rows per fund carry about 662 independent observations. Most differences we could
 report are smaller than their own uncertainty, and that is a property of daily data rather than
 something better code would fix.</li>
-<li>Barrier width is our most consequential single choice. Narrower and there is nothing to
-measure; wider and we lose a third of our effective sample.</li>
+<li><b>Barrier width is our most consequential single choice</b>, and we fixed it before we
+had scored anything. Afterwards we measured what it cost us. Narrower barriers would have been
+worse, not better: at ±1σ the model scores 0.505 against a floor of 0.502, which is nothing at
+all. Wider would have scored slightly higher, at the price of more effective sample. We could
+not act on any of this even if we had wanted to, because the holdout was already open.
+<div class="tw"><table id="t-bw"><caption>Barrier width against what the model can actually
+find. The floor moves with the width, because wide barriers time out and trailing volatility
+predicts timeouts, so only the lift is comparable across rows.</caption></table></div></li>
 <li>Our label merges "went down" with "went nowhere", and only the second is predictable from
 volatility. That is where the 0.544 floor comes from.</li>
 <li>The five funds share calendar dates, so rows overlap across funds as well as across time. We
@@ -534,9 +541,9 @@ function drawLabel(){
 
   // barriers across that window
   g.setLineDash([4,3]); g.lineWidth=1.6;
-  g.strokeStyle=css("--accent");
+  g.strokeStyle=css("--up");
   g.beginPath(); g.moveTo(X(i),Y(d.upper[i])); g.lineTo(X(endBar),Y(d.upper[i])); g.stroke();
-  g.strokeStyle=css("--warn");
+  g.strokeStyle=css("--down");
   g.beginPath(); g.moveTo(X(i),Y(d.lower[i])); g.lineTo(X(endBar),Y(d.lower[i])); g.stroke();
   g.setLineDash([]);
 
@@ -551,7 +558,7 @@ function drawLabel(){
   const off = d.t1_off[i];
   if(off>0 && i+off<=to){
     const rb = i+off;
-    g.fillStyle = d.label[i]===1?css("--accent"):css("--warn");
+    g.fillStyle = d.label[i]===1?css("--up"):css("--down");
     g.beginPath(); g.arc(X(rb), Y(d.label[i]===1?d.high[rb]:d.low[rb]), 4.5,0,7); g.fill();
   }
 
@@ -693,6 +700,12 @@ function renderTables(){
     ["max_drawdown","max DD",fx.pc(1)],["turnover","turnover",fx.n(1)],
     ["exposure","exposure",fx.pc(0)],["matched","matched",fx.n(3)],["dsr","DSR",fx.n(3)]],
     byModel(F.strategy), "Model");
+  if(F.barrier_sensitivity) table("t-bw", [["label1","label 1",fx.n(3)],
+    ["timeout","timeout",fx.pc(0)],["window","window (bars)",fx.n(1)],
+    ["effN","effective N",fx.n(0)],["auc","AUC",fx.n(4)],["floor","floor",fx.n(4)],
+    ["lift","lift",fx.n(4), r=>r.lift>0.04?"hi":""]],
+    Object.keys(F.barrier_sensitivity).map(k=>[(+k).toFixed(1)+"σ",F.barrier_sensitivity[k]]),
+    "Barrier width");
   if(F.holdout) table("t-holdout", [["auc","AUC",fx.n(4)],["precision","precision",fx.n(3)],
     ["coverage","coverage",fx.pc(0)],["sharpe","Sharpe",fx.n(3)],["sharpe_t","t",fx.n(2)],
     ["total_return","total",fx.pc(0)],["dsr","DSR",fx.n(3)]], byModel(F.holdout), "Model");
