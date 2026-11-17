@@ -4,116 +4,168 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Purged Cross-Validation for ETF Backtests</title>
+<meta name="description" content="Does leakage-safe cross-validation change what a backtest reports? ES 335 project, IIT Gandhinagar.">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Mono:wght@400&display=swap">
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Archivo:wght@500;600;700&family=Source+Serif+4:opsz,wght@8..60,400;8..60,600&family=IBM+Plex+Mono:wght@400;500&display=swap">
 <style>
-  /* One committed light palette: warm oat paper, deep slate blue to read
-     against it, rust reserved for the things that went wrong. */
+  /* A committed light identity: warm oat paper, deep slate blue to read
+     against it, rust for what went wrong, and a green/crimson pair that
+     belongs to the charts alone. Laid out as a rail of sections beside one
+     reading column, the way a methods paper is set. */
   :root{
-    --bg:#f1eee3; --card:#faf8f2; --raise:#fffefb;
+    --paper:#f1eee3; --card:#faf8f2; --raise:#fffefb; --sunk:#e9e5d8;
     --ink:#231f1a; --mid:#5f594e; --faint:#6f6a5e;
     --line:#ddd7c7; --grid:#e6e1d2;
-    --accent:#2b4a6f; --soft:#e4eaf1;
-    --warn:#9a4327; --warnsoft:#f6e7df;
+    --accent:#2b4a6f; --accent-lo:#e4eaf1;
+    --warn:#9a4327; --warn-lo:#f6e7df;
     --up:#2d6a4a; --down:#9c2a44;
     --sans:"Archivo",ui-sans-serif,system-ui,-apple-system,"Segoe UI",sans-serif;
     --serif:"Source Serif 4",Georgia,"Times New Roman",serif;
     --mono:"IBM Plex Mono",ui-monospace,SFMono-Regular,Menlo,monospace;
+    --rail:206px;
     color-scheme:light;
   }
   *{box-sizing:border-box}
-  body{margin:0;background:var(--bg);color:var(--ink);font:400 17px/1.66 var(--serif);
-    -webkit-font-smoothing:antialiased}
-  .wrap{max-width:820px;margin:0 auto;padding-left:max(16px,env(safe-area-inset-left,0px));
-    padding-right:max(16px,env(safe-area-inset-right,0px));padding-block:0 72px}
-  h1{font:700 clamp(1.7rem,5vw,2.35rem)/1.1 var(--sans);letter-spacing:-.028em;
-    margin:0 0 14px;text-wrap:balance}
-  h2{font:600 1.3rem/1.25 var(--sans);letter-spacing:-.015em;margin:54px 0 10px;
-    scroll-margin-top:16px;text-wrap:balance}
-  h3{font:600 1.02rem/1.35 var(--sans);margin:30px 0 4px}
-  p{margin:13px 0}
-  .lede{font-size:1.13rem;color:var(--mid)}
-  .meta{font:400 .84rem/1.6 var(--sans);color:var(--faint);margin:18px 0 0}
+  html{scroll-behavior:smooth}
+  @media (prefers-reduced-motion:reduce){html{scroll-behavior:auto}
+    *{animation:none!important;transition:none!important}}
+  body{margin:0;background:var(--paper);color:var(--ink);
+    font:400 17px/1.66 var(--serif);-webkit-font-smoothing:antialiased}
+
+  .shell{max-width:1140px;margin:0 auto;padding:0 clamp(16px,4vw,40px) 96px}
+  .masthead{padding-block:clamp(40px,7vw,76px) 0;max-width:760px}
+  .kicker{font:600 .74rem/1 var(--sans);letter-spacing:.16em;text-transform:uppercase;
+    color:var(--accent);margin:0 0 16px}
+  h1{font:700 clamp(1.85rem,4.6vw,2.7rem)/1.08 var(--sans);letter-spacing:-.03em;
+    margin:0 0 16px;text-wrap:balance}
+  .standfirst{font-size:clamp(1.05rem,2.2vw,1.2rem);color:var(--mid);margin:0;max-width:62ch}
+  .byline{font:400 .86rem/1.7 var(--sans);color:var(--faint);margin:22px 0 0;
+    padding-top:18px;border-top:1px solid var(--line)}
+
+  .stats{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);
+    border-radius:12px;overflow:hidden;margin:34px 0 0;
+    grid-template-columns:repeat(auto-fit,minmax(150px,1fr))}
+  .stats div{background:var(--raise);padding:15px 17px}
+  .stats .n{font:700 1.55rem/1.05 var(--sans);font-variant-numeric:tabular-nums;
+    letter-spacing:-.025em;color:var(--accent)}
+  .stats .k{font:500 .71rem/1.4 var(--sans);text-transform:uppercase;letter-spacing:.07em;
+    color:var(--faint);margin-top:6px}
+
+  .body{display:grid;gap:clamp(24px,5vw,56px);align-items:start;margin-top:clamp(32px,6vw,60px)}
+  @media (min-width:1000px){.body{grid-template-columns:var(--rail) minmax(0,1fr)}}
+  nav.rail{position:sticky;top:20px;align-self:start}
+  nav.rail ol{list-style:none;margin:0;padding:0;
+    font:500 .83rem/1.35 var(--sans);border-left:1px solid var(--line)}
+  nav.rail a{display:flex;gap:9px;padding:6px 0 6px 13px;color:var(--faint);
+    text-decoration:none;border-left:2px solid transparent;margin-left:-1px;
+    transition:color .15s,border-color .15s}
+  nav.rail a:hover{color:var(--ink)}
+  nav.rail a .num{font-variant-numeric:tabular-nums;color:var(--line);flex:none}
+  nav.rail a[aria-current=true]{color:var(--accent);border-left-color:var(--accent);font-weight:600}
+  nav.rail a[aria-current=true] .num{color:var(--accent)}
+  @media (max-width:999px){
+    nav.rail{top:0;z-index:20;background:var(--paper);
+      margin:0 calc(-1*clamp(16px,4vw,40px));padding:0 clamp(16px,4vw,40px);
+      border-bottom:1px solid var(--line)}
+    nav.rail ol{display:flex;gap:2px;overflow-x:auto;border-left:0;padding-block:9px;
+      scrollbar-width:none}
+    nav.rail ol::-webkit-scrollbar{display:none}
+    nav.rail a{white-space:nowrap;border-left:0;padding:5px 9px;margin:0;border-radius:6px}
+    nav.rail a[aria-current=true]{border-left:0;background:var(--accent-lo)}
+    nav.rail a .num{display:none}
+  }
+
+  main{min-width:0;max-width:72ch}
+  section{scroll-margin-top:clamp(14px,8vh,70px)}
+  section + section{margin-top:54px;padding-top:34px;border-top:1px solid var(--line)}
+  h2{font:600 1.36rem/1.22 var(--sans);letter-spacing:-.018em;margin:0 0 12px;
+    text-wrap:balance;display:flex;gap:12px;align-items:baseline}
+  h2 .num{font:700 .8rem/1 var(--sans);color:var(--accent);background:var(--accent-lo);
+    padding:5px 7px;border-radius:5px;flex:none;font-variant-numeric:tabular-nums}
+  h3{font:600 1.03rem/1.35 var(--sans);margin:30px 0 4px}
+  p{margin:13px 0} p:first-of-type{margin-top:0}
   a{color:var(--accent);text-decoration-thickness:1px;text-underline-offset:2px}
   code{font:.85em var(--mono);background:var(--grid);padding:.12em .36em;border-radius:4px}
-  ul{margin:13px 0;padding-left:21px} li{margin:7px 0} li::marker{color:var(--faint)}
   b,strong{font-weight:600}
+  ul{margin:13px 0;padding-left:20px} li{margin:8px 0} li::marker{color:var(--line)}
+  .dl{margin:16px 0;display:grid;gap:11px}
+  .dl > div{display:grid;grid-template-columns:minmax(0,164px) minmax(0,1fr);gap:4px 16px}
+  .dl dt{font:600 .88rem/1.5 var(--sans);color:var(--ink)}
+  .dl dd{margin:0;color:var(--mid);font-size:.97rem}
+  @media (max-width:560px){.dl > div{grid-template-columns:1fr}}
 
-  /* Three tiers of box, loudest first. A tier is a claim about how much the
-     reader should slow down, so each one looks different rather than just
-     differently coloured. */
-
-  /* 1. a result we want you to leave with */
-  .answer{background:var(--soft);border-radius:12px;padding:20px 22px;margin:26px 0;
-    box-shadow:inset 0 0 0 1px #cfd9e6}
-  .answer h3{margin:0 0 9px;color:var(--accent);font:700 .72rem/1 var(--sans);
-    text-transform:uppercase;letter-spacing:.11em}
-  .answer p{margin:9px 0;font-size:1.04rem} .answer p:last-child{margin-bottom:0}
-
-  /* 2. a mechanism worth pausing on */
-  .box{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--accent);
+  .key{background:var(--accent-lo);border-radius:12px;padding:20px 22px;margin:26px 0;
+    box-shadow:inset 0 0 0 1px #ccd7e5}
+  .key .tag{display:block;font:700 .7rem/1 var(--sans);text-transform:uppercase;
+    letter-spacing:.12em;color:var(--accent);margin-bottom:9px}
+  .key p{font-size:1.03rem} .key p:last-child{margin-bottom:0}
+  .note{background:var(--card);border:1px solid var(--line);border-left:3px solid var(--accent);
     border-radius:0 10px 10px 0;padding:15px 18px;margin:22px 0}
-  .box p:first-child{margin-top:0} .box p:last-child{margin-bottom:0}
-  .box .tag{display:block;font:700 .68rem/1 var(--sans);text-transform:uppercase;
+  .note p:last-child{margin-bottom:0}
+  .note .tag{display:block;font:700 .68rem/1 var(--sans);text-transform:uppercase;
     letter-spacing:.11em;color:var(--accent);margin-bottom:8px}
+  .note.flag{border-left-color:var(--warn);background:var(--warn-lo);border-color:#e8d5c9}
+  .note.flag .tag{color:var(--warn)}
+  .aside{font-size:.93rem;color:var(--mid);background:var(--grid);border-radius:8px;
+    padding:11px 14px;margin:16px 0}
 
-  /* 3. something we got wrong, or a reading that would mislead */
-  .box.flag{border-left-color:var(--warn);background:var(--warnsoft);border-color:#e8d5c9}
-  .box.flag .tag{color:var(--warn)}
-
-  /* quietest: a caveat that belongs next to the thing it qualifies */
-  .aside{font:400 .92rem/1.6 var(--serif);color:var(--mid);background:var(--grid);
-    border-radius:8px;padding:11px 14px;margin:16px 0}
-
-  /* headline figures, because these four numbers are the project */
-  .stats{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);
-    border-radius:12px;overflow:hidden;margin:26px 0;
-    grid-template-columns:repeat(auto-fit,minmax(142px,1fr))}
-  .stats div{background:var(--raise);padding:14px 16px}
-  .stats .n{font:700 1.5rem/1.1 var(--sans);font-variant-numeric:tabular-nums;
-    letter-spacing:-.02em;color:var(--accent)}
-  .stats .k{font:500 .72rem/1.35 var(--sans);text-transform:uppercase;letter-spacing:.07em;
-    color:var(--faint);margin-top:5px}
-
-  /* interactive blocks */
-  /* an interactive panel is raised off the paper, so it reads as a thing you
-     operate rather than more page to read */
-  .demo{background:var(--raise);border:1px solid var(--line);border-radius:12px;
-    padding:18px;margin:24px 0;box-shadow:0 1px 2px rgba(60,48,30,.05),
-    0 6px 16px -10px rgba(60,48,30,.14)}
-  .demo .hd{display:flex;justify-content:space-between;align-items:baseline;gap:12px;
-    flex-wrap:wrap;margin-bottom:13px;padding-bottom:11px;border-bottom:1px solid var(--grid)}
-  .demo .hd b{font:700 .72rem/1 var(--sans);text-transform:uppercase;letter-spacing:.11em;
+  figure{margin:26px 0;background:var(--raise);border:1px solid var(--line);
+    border-radius:12px;padding:18px;
+    box-shadow:0 1px 2px rgba(60,48,30,.05),0 8px 20px -14px rgba(60,48,30,.2)}
+  figcaption{font:400 .81rem/1.55 var(--sans);color:var(--faint);margin-top:12px;
+    padding-top:11px;border-top:1px solid var(--grid)}
+  figcaption b{color:var(--accent);font-weight:700}
+  .fig-hd{display:flex;justify-content:space-between;align-items:baseline;gap:12px;
+    flex-wrap:wrap;margin-bottom:14px}
+  .fig-hd b{font:700 .72rem/1 var(--sans);text-transform:uppercase;letter-spacing:.12em;
     color:var(--accent)}
-  .demo .hd span{font:500 .82rem var(--sans);color:var(--faint);
-    font-variant-numeric:tabular-nums}
-  canvas{width:100%;display:block;border-radius:6px}
-  .ctl{display:grid;gap:15px;grid-template-columns:repeat(auto-fit,minmax(170px,1fr));
-    margin-top:15px}
+  .fig-hd span{font:500 .84rem var(--sans);color:var(--faint);font-variant-numeric:tabular-nums}
+  .canvas-wrap{position:relative}
+  canvas{width:100%;display:block;border-radius:6px;touch-action:none}
+  .tip{position:absolute;pointer-events:none;opacity:0;transition:opacity .1s;
+    background:var(--ink);color:var(--raise);border-radius:7px;padding:7px 10px;
+    font:500 .74rem/1.55 var(--sans);font-variant-numeric:tabular-nums;white-space:nowrap;
+    box-shadow:0 4px 14px rgba(0,0,0,.22);z-index:3}
+  .tip.on{opacity:1}
+  .tip .r{display:flex;justify-content:space-between;gap:16px}
+  .tip .d{width:8px;height:8px;border-radius:2px;display:inline-block;margin-right:6px}
+
+  .ctl{display:grid;gap:16px;grid-template-columns:repeat(auto-fit,minmax(168px,1fr));
+    margin-top:16px}
   label{display:block;font:500 .7rem/1.3 var(--sans);text-transform:uppercase;
-    letter-spacing:.08em;color:var(--mid);margin-bottom:6px}
-  select,input[type=range]{width:100%}
-  select{padding:7px 8px;border:1px solid var(--line);border-radius:6px;background:var(--bg);
-    color:var(--ink);font:500 .86rem var(--sans)}
-  input[type=range]{accent-color:var(--accent)}
+    letter-spacing:.08em;color:var(--mid);margin-bottom:7px}
   .v{font-weight:700;font-variant-numeric:tabular-nums;color:var(--ink)}
-  fieldset{border:0;padding:0;margin:0} fieldset:disabled{opacity:.4}
+  select{width:100%;padding:8px 9px;border:1px solid var(--line);border-radius:7px;
+    background:var(--paper);color:var(--ink);font:500 .86rem var(--sans);cursor:pointer}
+  select:focus-visible,button:focus-visible,input:focus-visible,a:focus-visible{
+    outline:2px solid var(--accent);outline-offset:2px}
+  input[type=range]{width:100%;-webkit-appearance:none;appearance:none;background:transparent;
+    cursor:pointer;height:22px}
+  input[type=range]::-webkit-slider-runnable-track{height:5px;border-radius:3px;background:var(--sunk)}
+  input[type=range]::-moz-range-track{height:5px;border-radius:3px;background:var(--sunk)}
+  input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;appearance:none;
+    width:17px;height:17px;border-radius:50%;background:var(--accent);margin-top:-6px;
+    border:2px solid var(--raise);box-shadow:0 1px 3px rgba(0,0,0,.25);transition:transform .12s}
+  input[type=range]::-moz-range-thumb{width:15px;height:15px;border-radius:50%;
+    background:var(--accent);border:2px solid var(--raise);box-shadow:0 1px 3px rgba(0,0,0,.25)}
+  input[type=range]:hover::-webkit-slider-thumb{transform:scale(1.12)}
+  fieldset{border:0;padding:0;margin:0} fieldset:disabled{opacity:.42}
   .seg{display:flex;border:1px solid var(--line);border-radius:8px;overflow:hidden}
-  .seg button{flex:1;padding:9px 6px;border:0;background:var(--bg);color:var(--mid);
+  .seg button{flex:1;padding:9px 6px;border:0;background:var(--paper);color:var(--mid);
     font:600 .82rem var(--sans);cursor:pointer;transition:background .12s,color .12s}
   .seg button:hover{background:var(--grid)}
   .seg button[aria-pressed=true]{background:var(--accent);color:var(--raise)}
   .read{display:grid;gap:1px;background:var(--line);border:1px solid var(--line);
-    border-radius:9px;overflow:hidden;margin-top:15px;
-    grid-template-columns:repeat(auto-fit,minmax(108px,1fr))}
+    border-radius:9px;overflow:hidden;margin-top:16px;
+    grid-template-columns:repeat(auto-fit,minmax(106px,1fr))}
   .read div{background:var(--card);padding:11px 13px}
-  .read .k{font:500 .67rem/1.3 var(--sans);text-transform:uppercase;letter-spacing:.07em;
+  .read .k{font:500 .66rem/1.3 var(--sans);text-transform:uppercase;letter-spacing:.07em;
     color:var(--faint)}
   .read .n{font:700 1.08rem/1.25 var(--sans);font-variant-numeric:tabular-nums;margin-top:3px}
   .read .n.hi{color:var(--accent)} .read .n.lo{color:var(--warn)}
-  .legend{display:flex;gap:17px;flex-wrap:wrap;font:400 .78rem var(--sans);
-    color:var(--faint);margin-top:11px}
-  .sw{display:inline-block;width:18px;height:3px;vertical-align:middle;margin-right:5px}
+  .legend{display:flex;gap:16px;flex-wrap:wrap;font:400 .78rem var(--sans);
+    color:var(--faint);margin-top:12px}
+  .sw{display:inline-block;width:18px;height:3px;vertical-align:middle;margin-right:6px}
 
   .tw{overflow-x:auto;margin:20px 0}
   table{width:100%;border-collapse:collapse;font:400 .85rem/1.45 var(--sans);min-width:380px}
@@ -128,350 +180,489 @@
   td.hi{font-weight:700;color:var(--accent)} td.lo{font-weight:700;color:var(--warn)}
   caption{caption-side:bottom;text-align:left;color:var(--faint);
     font:400 .79rem/1.55 var(--sans);padding-top:9px}
+  caption b{color:var(--accent);font-weight:700}
 
-  footer{margin-top:60px;padding-top:22px;border-top:2px solid var(--line);
-    color:var(--faint);font:400 .85rem/1.65 var(--sans)}
-  @media (max-width:560px){h2{margin-top:40px}}
-  @media (prefers-reduced-motion:reduce){*{transition:none!important}}
+  .repro{background:var(--ink);border-radius:12px;padding:16px 18px;margin:20px 0;position:relative}
+  .repro pre{margin:0;overflow-x:auto;color:#e9e4d6;font:400 .81rem/1.75 var(--mono)}
+  .repro .c{color:#9a9384}
+  .repro button{position:absolute;top:12px;right:12px;border:1px solid #4a443a;
+    background:#312b24;color:#e9e4d6;border-radius:6px;padding:5px 10px;cursor:pointer;
+    font:600 .72rem var(--sans)}
+  .repro button:hover{background:#3d3630}
+
+  footer{margin-top:58px;padding-top:22px;border-top:2px solid var(--line);
+    color:var(--faint);font:400 .85rem/1.7 var(--sans);max-width:72ch}
 </style>
 </head>
 <body>
-<div class="wrap">
+<div class="shell">
 
-<header style="padding-block:48px 0">
+<header class="masthead">
+  <p class="kicker">ES 335 · Machine Learning · IIT Gandhinagar</p>
   <h1>Does leakage-safe cross-validation change what a backtest reports?</h1>
-  <p class="lede">We trained one model on five ETFs, then scored that same model three
-  different ways and measured how far apart the answers came out.</p>
-  <p class="meta">ES 335 · Vansh Dhameliya (25110337) · Aksh Hareshkumar Patel (25110017)<br>
-  Code and every dated decision:
+  <p class="standfirst">We trained one model on five ETFs, scored that same model three
+  different ways, and measured how far apart the answers came out. The spread is the
+  result; the model is only the vehicle.</p>
+  <p class="byline">Vansh Dhameliya (25110337) · Aksh Hareshkumar Patel (25110017) &nbsp;·&nbsp;
+  Code, tests and every dated decision:
   <a href="https://github.com/Vansh8803/purged-cv-etf">github.com/Vansh8803/purged-cv-etf</a></p>
+
+  <div class="stats">
+    <div><div class="n">662</div><div class="k">independent observations inside 4,302 rows</div></div>
+    <div><div class="n">0.544</div><div class="k">AUC a model with no signal still reaches</div></div>
+    <div><div class="n">0.33%</div><div class="k">training rows our control leaks</div></div>
+    <div><div class="n">0.5754</div><div class="k">holdout AUC, predicted beforehand as 0.5755</div></div>
+  </div>
 </header>
 
-<div class="answer">
-  <h3>What we found</h3>
-  <p>Almost nothing — and the reason turned out to be more interesting than the result we
-  expected. How much a careless backtest flatters itself depends on <b>how you cut the
-  folds</b>, not on whether you purge. We cut ours as blocks of time, which leaks 0.33% of
-  training rows, so purging had almost nothing to remove.</p>
-  <p>Shuffle the same folds and the leak jumps to 88%. You can try that two sections down.</p>
-</div>
+<div class="body">
+<nav class="rail" aria-label="Sections"><ol>
+  <li><a href="#question"><span class="num">01</span><span>The question</span></a></li>
+  <li><a href="#label"><span class="num">02</span><span>The label</span></a></li>
+  <li><a href="#overlap"><span class="num">03</span><span>Why CV breaks</span></a></li>
+  <li><a href="#data"><span class="num">04</span><span>The data</span></a></li>
+  <li><a href="#prep"><span class="num">05</span><span>Preprocessing</span></a></li>
+  <li><a href="#models"><span class="num">06</span><span>The models</span></a></li>
+  <li><a href="#eval"><span class="num">07</span><span>How we scored</span></a></li>
+  <li><a href="#results"><span class="num">08</span><span>Results</span></a></li>
+  <li><a href="#errors"><span class="num">09</span><span>Error analysis</span></a></li>
+  <li><a href="#lab"><span class="num">10</span><span>Strategy lab</span></a></li>
+  <li><a href="#holdout"><span class="num">11</span><span>The holdout</span></a></li>
+  <li><a href="#limits"><span class="num">12</span><span>Limitations</span></a></li>
+  <li><a href="#reproduce"><span class="num">13</span><span>Reproduce it</span></a></li>
+</ol></nav>
 
-<div class="stats">
-  <div><div class="n">662</div><div class="k">independent observations in 4,302 rows</div></div>
-  <div><div class="n">0.544</div><div class="k">AUC a model with no signal reaches</div></div>
-  <div><div class="n">0.33%</div><div class="k">training rows our control leaks</div></div>
-  <div><div class="n">0.5754</div><div class="k">holdout AUC, predicted as 0.5755</div></div>
-</div>
+<main>
 
-<h2 id="label">1. What one row is, and what we asked of it</h2>
+<section id="question">
+  <h2><span class="num">01</span>The question, and what one row is</h2>
+  <p>Financial labels are not points in time, they are windows. A label that takes ten days to
+  resolve overlaps the next nine rows, so two nearby rows partly share an outcome.
+  Cross-validation assumes rows are independent, and when they are not, training rows can carry
+  answers to test rows.</p>
+  <p>The standard fix is <b>purging</b>: drop any training row whose label window overlaps the
+  test fold. We wanted to know whether it changes the reported number, and by how much.</p>
+  <p><b>One row is one trading day for one ETF.</b> It carries that day's open, high, low,
+  close, adjusted close and volume; ten features computed from earlier days; a binary label;
+  and <code>t1</code>, the date that label resolved. That last column is what purging is defined
+  in terms of.</p>
 
-<p>One row is one trading day for one ETF. It carries that day's prices, ten features computed
-from earlier days, and a label.</p>
-
-<p>To build the label we draw two price levels around the day's close and ask which one the
-price touches first over the next ten trading days. If it reaches the upper level first we
-label the day 1; if it hits the lower level first, or drifts without reaching either, we label
-it 0. We also record the day it resolved, which we call <code>t1</code>.</p>
-
-<p>We set the gap between those levels from recent volatility rather than using a fixed
-percentage, because a 2% move means something very different in a calm month than in a crash.
-Drag through the slider below and watch the barriers widen as 2008 arrives.</p>
-
-<div class="demo">
-  <div class="hd"><b>Explore the label · SPY, 2007–2009</b><span id="ld-date"></span></div>
-  <canvas id="ld-canvas" height="300" aria-label="Price with barriers and resolution"></canvas>
-  <div class="legend">
-    <span><span class="sw" style="background:var(--ink)"></span>close</span>
-    <span><span class="sw" style="background:var(--up)"></span>upper barrier</span>
-    <span><span class="sw" style="background:var(--down)"></span>lower barrier</span>
-    <span><span class="sw" style="background:var(--faint)"></span>daily high–low range</span>
+  <div class="key"><span class="tag">What we found</span>
+    <p>Almost nothing — and the reason turned out to be better than the result we expected. How
+    much a careless backtest flatters itself depends on <b>how you cut the folds</b>, not on
+    whether you purge. We cut ours as blocks of time, which leaks 0.33% of training rows, so
+    purging had almost nothing left to remove.</p>
+    <p>Shuffle the same folds and the leak jumps to 88%. You can try that in §3.</p>
   </div>
-  <div class="ctl">
-    <div><label for="ld-slider">Day · <span class="v" id="ld-i">0</span> of 515</label>
-      <input type="range" id="ld-slider" min="0" max="514" value="60"></div>
+</section>
+
+<section id="label">
+  <h2><span class="num">02</span>The label</h2>
+  <p>For each day we draw two price levels around the close and ask which one the price touches
+  first over the next ten trading days. Reach the upper level first and we label the day 1; hit
+  the lower one first, or drift without reaching either, and it is 0.</p>
+  <p>We set the gap from recent volatility rather than using a fixed percentage, because a 2%
+  move means something very different in a calm month than in a crash. Drag through the slider
+  and watch the barriers widen as 2008 arrives.</p>
+
+  <figure>
+    <div class="fig-hd"><b>Figure 1 · Explore the label</b><span id="ld-date"></span></div>
+    <div class="canvas-wrap">
+      <canvas id="ld-canvas" height="300" aria-label="SPY price with its barriers and the day the label resolved"></canvas>
+    </div>
+    <div class="legend">
+      <span><span class="sw" style="background:var(--ink)"></span>close</span>
+      <span><span class="sw" style="background:var(--up)"></span>upper barrier</span>
+      <span><span class="sw" style="background:var(--down)"></span>lower barrier</span>
+      <span><span class="sw" style="background:var(--faint)"></span>daily high–low range</span>
+    </div>
+    <div class="ctl"><div>
+      <label for="ld-slider">Day · <span class="v" id="ld-i">0</span></label>
+      <input type="range" id="ld-slider" min="0" max="514" value="60">
+    </div></div>
+    <div class="read">
+      <div><div class="k">Barrier width</div><div class="n" id="ld-width">—</div></div>
+      <div><div class="k">Resolved in</div><div class="n" id="ld-bars">—</div></div>
+      <div><div class="k">Label</div><div class="n" id="ld-label">—</div></div>
+      <div><div class="k">Touched</div><div class="n" id="ld-touch">—</div></div>
+    </div>
+    <figcaption><b>Figure 1.</b> SPY, June 2007 to June 2009. The shaded band is the ten-day
+    window being judged. Barriers sit about 5% apart in calm 2007 and over 20% apart at the end
+    of 2008, which is the point of scaling them to volatility.</figcaption>
+  </figure>
+
+  <div class="note flag"><span class="tag">A mistake we caught</span>
+    <p>Our first barriers were 2.5 times narrower. At that width a single day's trading range
+    was usually already wider than the gap, so the median day resolved in <b>one bar</b> and the
+    ten-day limit almost never mattered.</p>
+    <p>That would have wrecked the project. One-bar windows barely overlap, so there would have
+    been nothing for purging to remove, and we would have reported our own parameter choice as a
+    finding. Widening cost us sample size — 1,575 effective observations down to 662 — and we
+    took that trade because the overlap is the thing we are studying.</p>
   </div>
-  <div class="read">
-    <div><div class="k">Barrier width</div><div class="n" id="ld-width">—</div></div>
-    <div><div class="k">Resolved in</div><div class="n" id="ld-bars">—</div></div>
-    <div><div class="k">Label</div><div class="n" id="ld-label">—</div></div>
-    <div><div class="k">Touched</div><div class="n" id="ld-touch">—</div></div>
+</section>
+
+<section id="overlap">
+  <h2><span class="num">03</span>Why ordinary cross-validation breaks here</h2>
+  <p>If today takes six days to resolve and tomorrow also takes six, the two windows share five
+  days of price history. Put today in training and tomorrow in testing and we have trained on a
+  row whose answer was decided by almost the same future prices as the row we are about to be
+  tested on. The score comes out too high and nothing looks broken.</p>
+  <p>Our 4,302 rows per ETF carry about <b>662 independent observations</b> once that overlap is
+  accounted for. Every error bar on this page follows from that number.</p>
+  <p>Alongside purging we apply an <b>embargo</b>, dropping rows that start in the few days just
+  after a fold. Our features use 20-day rolling windows, so a row just after a fold computes its
+  features partly from bars inside it.</p>
+
+  <h3>How much leaks depends on how you cut the folds</h3>
+  <figure>
+    <div class="fig-hd"><b>Figure 2 · Fold geometry</b><span>T = tested · t = trained on</span></div>
+    <div class="seg" role="group" aria-label="Fold shape" style="max-width:330px">
+      <button id="fg-contig" type="button" aria-pressed="true">Blocks of time</button>
+      <button id="fg-shuf" type="button" aria-pressed="false">Shuffled</button>
+    </div>
+    <div class="canvas-wrap" style="margin-top:14px">
+      <canvas id="fg-canvas" height="190" aria-label="Fold membership across rows, with leaked training rows highlighted"></canvas>
+    </div>
+    <div class="read">
+      <div><div class="k">Leaks in this picture</div><div class="n" id="fg-toy">—</div></div>
+      <div><div class="k">In our real data</div><div class="n" id="fg-real">—</div></div>
+      <div><div class="k">After purging</div><div class="n hi">0.00%</div></div>
+    </div>
+    <figcaption><b>Figure 2.</b> Rust marks a training row whose window reaches a test row. With
+    blocks they occur only at the eight fold edges; shuffled, they are everywhere. This picture
+    holds 150 rows and our data holds 4,302 — the edge count stays at eight either way, so with
+    blocks the leak shrinks as data grows and with shuffling it does not.</figcaption>
+  </figure>
+
+  <p>We chose blocks for the control. Our specification says "standard 5-fold K-fold", and
+  <code>sklearn.KFold</code> does not shuffle by default. It is also the harder test for our own
+  claim, since shuffling would have handed us a huge gap against a control nobody sensible would
+  use.</p>
+</section>
+
+<section id="data">
+  <h2><span class="num">04</span>The data</h2>
+  <p>Five ETFs — SPY, QQQ, IWM, TLT and GLD — rather than individual stocks, because a list of
+  stocks silently excludes everything that went bankrupt. GLD launched in late 2004, so our
+  range starts in 2005. Daily bars from Yahoo Finance via <code>yfinance</code>, downloaded once
+  in October 2026 and cached, because Yahoo revises adjusted prices after the fact and a fresh
+  download would quietly change numbers we had already computed.</p>
+  <p><b>Key variables.</b> Open, high, low, close, adjusted close and volume. The high and low
+  are load-bearing: our label asks whether a price level was <i>touched</i> during the day, not
+  where the day closed.</p>
+
+  <div class="tw"><table id="t-data"><caption><b>Table 1.</b> 5,282 raw daily bars per fund, no
+  missing values, all five on the same NYSE calendar. Rows drop after the 200-day warm-up our
+  longest moving average needs.</caption></table></div>
+
+  <p><b>The quality problem that mattered.</b> Dividend-paying funds have an adjusted close that
+  differs from the raw close, and our label depends on intraday highs and lows. Mixing raw
+  intraday prices with a volatility threshold built from adjusted returns would let a scheduled
+  dividend drop trigger a false stop-loss, so we scale the highs and lows by the same factor.
+  GLD pays no dividend, so its factor is exactly 1.0 on every row, which gave us a free test of
+  that code path.</p>
+</section>
+
+<section id="prep">
+  <h2><span class="num">05</span>Preprocessing, and the leak that is easy to miss</h2>
+  <p>Ten features, all computed from information available on or before a day and then
+  <b>shifted one bar</b>, so a row dated <i>t</i> holds values computed up to <i>t</i>−1.</p>
+
+  <div class="dl">
+    <div><dt>Trailing returns</dt><dd>log return over 1, 5, 10 and 20 days</dd></div>
+    <div><dt>Realised volatility</dt><dd>standard deviation of daily log returns, 20-day window</dd></div>
+    <div><dt>Volatility of volatility</dt><dd>standard deviation of that 20-day series, 20-day window</dd></div>
+    <div><dt>Distance from average</dt><dd><code>(close − MA) / MA</code> for 20, 50 and 200 days</dd></div>
+    <div><dt>Volume z-score</dt><dd>volume against its own 20-day mean and standard deviation</dd></div>
   </div>
-</div>
 
-<p>Two things show up straight away. The barriers are about 5% apart in calm 2007 and over 20%
-apart at the end of 2008, which is the point of scaling them. And most days resolve in a handful
-of bars, not ten — the label window is short, which matters for the next section.</p>
+  <p><b>Computing these over the whole dataset is not a leak.</b> Every one is a deterministic
+  rolling function of its own past, so a row's value does not change depending on which fold the
+  row lands in. Nothing is estimated from the sample.</p>
+  <p><b>Preparing them over the whole dataset is a leak.</b> A scaler learns each column's mean
+  and standard deviation. Fit it once on everything and every fold's test rows have contributed
+  to the numbers used to transform them. The model never saw those rows, but information from
+  them arrived through the back door. So our scaler and imputer are fitted inside each fold, on
+  training rows only. A test spikes a test-fold value to 10<sup>9</sup> and asserts the fitted
+  scale does not move.</p>
 
-<div class="box flag">
-  <span class="tag">A mistake we caught</span>
-  <p><b>We got this wrong first.</b> Our original barriers were 2.5 times narrower. At that
-  width a single day's trading range was usually already wider than the gap, so the median day
-  resolved in <b>one bar</b> and the ten-day limit almost never mattered.</p>
-  <p>That would have wrecked the project. One-bar windows barely overlap, so there would have
-  been nothing for purging to remove, and we would have reported our own parameter choice as a
-  finding. Widening the barriers cost us sample size — 1,575 effective observations down to 662
-  — and we took that trade because the overlap is the thing we are studying.</p>
-</div>
-
-<h2 id="overlap">2. Why ordinary cross-validation breaks here</h2>
-
-<p>The label for today is not a fact about today. It is a fact about a stretch of days that
-starts today and ends when the price finally touches something. If today takes six days to
-resolve and tomorrow also takes six, the two windows share five days of price history. They are
-not two independent observations.</p>
-
-<p>So if today lands in the training set and tomorrow lands in the test set, we have trained on
-a row whose answer was decided by almost the same future prices as the row we are about to be
-tested on. The score comes out too high and nothing in the code looks broken.</p>
-
-<p>Our 4,302 rows per ETF carry about <b>662 independent observations</b> once we account for
-that overlap. Every error bar on this page follows from that number.</p>
-
-<p><b>Purging</b> is the fix: before training, drop any training row whose window overlaps the
-test fold. We also add an <b>embargo</b>, dropping rows that start in the few days just after a
-fold, because our features use 20-day rolling windows and a row just after a fold computes its
-features partly from bars inside it.</p>
-
-<h3>How much actually leaks depends on how you cut the folds</h3>
-
-<p>This is where our headline result came from, and it is easier to see than to read. Switch
-between the two fold shapes below.</p>
-
-<div class="demo">
-  <div class="hd"><b>Fold geometry</b><span>T = tested here · t = trained on</span></div>
-  <div class="seg" role="group" aria-label="Fold shape" style="max-width:340px">
-    <button id="fg-contig" aria-pressed="true">Blocks of time</button>
-    <button id="fg-shuf" aria-pressed="false">Shuffled</button>
+  <div class="note"><span class="tag">What the model may not see</span>
+    <p>The raw bars at <i>t</i> are withheld, obviously. Less obviously, so is <code>sigma</code>
+    — the volatility that <i>sets the barrier width</i>. Handing it over would tell the model how
+    far price must travel for the label to fire. The shifted version,
+    <code>realized_vol_20d</code>, is the honest one. That exclusion turned out to matter far
+    more than we expected; see the floor in §7.</p>
   </div>
-  <canvas id="fg-canvas" height="190" style="margin-top:14px"
-    aria-label="Fold membership across rows"></canvas>
-  <div class="read">
-    <div><div class="k">Leaks in this picture</div><div class="n" id="fg-toy">—</div></div>
-    <div><div class="k">In our real data</div><div class="n" id="fg-real">—</div></div>
-    <div><div class="k">After purging</div><div class="n hi">0.00%</div></div>
+</section>
+
+<section id="models">
+  <h2><span class="num">06</span>The baseline and the models</h2>
+  <p>All five predict the same binary target, so precision and AUC mean the same thing in every
+  row of the comparison. Two of them are not fitted at all and are scored through exactly the
+  same code path as the learned ones — same folds, same test rows, same metric, same purging.
+  That is the only way the comparison is like for like.</p>
+
+  <div class="dl">
+    <div><dt>Buy and hold</dt><dd><b>The reference.</b> Acts every single day. Not really a
+      model: the thing every strategy has to beat, and the number precision is read against. Its
+      AUC is exactly 0.500, because it scores every day the same and so cannot rank.</dd></div>
+    <div><dt>MA crossover</dt><dd><b>The baseline.</b> Long while the 20-day average price sits
+      above the 50-day, applied one bar late. No learned parameters, so it cannot leak or
+      overfit — which makes it a fixed reference point across every scheme.</dd></div>
+    <div><dt>Logistic regression</dt><dd><b>The floor.</b> Assumes the log-odds of the label are
+      a straight-line combination of the ten features and fits eleven numbers. If nothing beats
+      this, complexity has not earned its place.</dd></div>
+    <div><dt>Gradient-boosted trees</dt><dd>Fits a shallow tree, looks at what it got wrong,
+      fits another targeting those errors, 200 times over. Captures interactions a linear model
+      cannot. Capacity held down hard, because ~660 effective observations is the binding
+      constraint rather than model class.</dd></div>
+    <div><dt>Meta-labelling</dt><dd>Two stages. The crossover rule decides <i>when to consider
+      acting</i>; a model trained only on the days that rule fires decides <i>whether to take the
+      signal</i>. It can filter, never generate.</dd></div>
   </div>
-</div>
 
-<p>A training row leaks when a test row sits close to it <em>in time</em>. With blocks, test
-rows only sit near training rows at the eight fold edges, so the leak is small. Shuffle them and
-test rows are everywhere, so nearly every training row has one nearby.</p>
+  <p>No neural network, and no hyperparameter search. Settings are fixed and chosen for the
+  sample size rather than tuned on it, which keeps our honest trial count at five — the number
+  the Deflated Sharpe Ratio in §11 depends on.</p>
+</section>
 
-<p>Notice the two percentages differ. The picture above has 150 rows, and the real data has
-4,302. The number of fold edges stays at eight either way, so with blocks the leak shrinks as
-data grows. With shuffling it does not. That is the whole mechanism.</p>
+<section id="eval">
+  <h2><span class="num">07</span>How we scored them</h2>
+  <p>Three schemes, all built on one shared overlap rule so they cannot drift apart.
+  <b>Purged 5-fold with an embargo</b> is our real number. <b>Standard 5-fold</b> is the
+  control, run deliberately and wrong for this data, so the effect of purging can be measured at
+  all. <b>Walk-forward, expanding</b> only ever trains on the past. We also held back 2023–2025
+  entirely and opened it once, at the end.</p>
+  <p>We report precision against the rate you would get by acting every day, coverage beside it
+  because precision alone rewards abstention, AUC for ranking, and Sharpe with its standard
+  error. One baseline needs saying out loud.</p>
 
-<p>We chose blocks for the control, for two reasons. Our specification says "standard 5-fold
-K-fold", and <code>sklearn.KFold</code> does not shuffle by default. And it is the harder test
-for our own claim: shuffling would have handed us a huge gap against a control nobody sensible
-would use.</p>
-
-<h2 id="setup">3. Data and setup</h2>
-
-<p>We used SPY, QQQ, IWM, TLT and GLD — index funds rather than individual stocks, because a
-list of stocks silently excludes everything that went bankrupt. GLD launched in late 2004, so
-our range starts in 2005. We downloaded everything once in October 2026 and cached it, because
-Yahoo revises adjusted prices after the fact and a fresh download would quietly change numbers
-we had already computed.</p>
-
-<div class="tw"><table id="t-data"><caption>5,282 raw daily bars per fund, no missing values,
-all five on the same NYSE calendar. Rows drop after the 200-day warm-up our longest moving
-average needs.</caption></table></div>
-
-<p>One quality problem mattered. Dividend-paying funds have an adjusted close that differs from
-the raw close, and our label depends on intraday highs and lows. Mixing raw intraday prices with
-a volatility threshold built from adjusted returns would let a scheduled dividend drop trigger a
-false stop-loss, so we scale the highs and lows by the same factor. GLD pays no dividend, so its
-factor is exactly 1.0 on every row, which gave us a free test of that code path.</p>
-
-<h3>The three schemes, and one metric baseline worth knowing</h3>
-
-<p>We scored every model under purged 5-fold with an embargo (our real number), standard 5-fold
-with no correction (the control, which is wrong for this data on purpose), and walk-forward,
-which only ever trains on the past. We also held back 2023–2025 entirely and opened it once at
-the end.</p>
-
-<p>We report AUC, precision against the rate you would get by acting every day, and Sharpe with
-its standard error. One baseline needs saying out loud:</p>
-
-<div class="box flag">
-  <span class="tag">Read this before the results</span>
-  <p><b>An AUC of 0.544 means no signal, not a weak one.</b> We generated fake price series with
-  no predictability at all, ran the whole pipeline on them, and the full feature set still
-  scored 0.544.</p>
-  <p>The cause is our own label. High volatility means wide barriers, wide barriers are less
-  likely to be touched, an untouched barrier times out, and a timeout counts as 0. So trailing
-  volatility predicts the label without any skill at predicting direction. Among days that did
-  touch a barrier, 50.9% went up, which is a coin flip exactly as it should be.</p>
-  <p>Without that check we would have reported an AUC of 0.55 as a modest edge when it is the
-  floor. Every AUC below is read against 0.544.</p>
-</div>
-
-<p>The same synthetic data told us how small a signal we could have detected: we start to pick
-up predictability at an autocorrelation of about 0.4. The real figure in these funds runs from
-−0.107 to −0.010, an order of magnitude smaller and the wrong sign. So when we find nothing, we
-can say we found no edge above roughly 0.4, rather than just shrugging.</p>
-
-<h2 id="results">4. Results</h2>
-
-<div class="tw"><table id="t-auc"><caption>AUC by model and scheme, averaged over the five funds.
-Logistic regression is the only model clearly above the 0.544 floor. Both handwritten rules sit
-below it, which means a model knowing nothing but trailing volatility would beat our
-baseline.</caption></table></div>
-
-<p>The gap we went looking for — control minus purged — is effectively zero. Swept across every
-embargo from 0 to 20 bars, the largest value anywhere is about one thousandth of an AUC point,
-against a single fold's standard error of seventeen thousandths. Its direction even changes from
-fund to fund, so we cannot tell you its sign.</p>
-
-<div class="tw"><table id="t-gap"><caption>Control minus purged, in AUC × 1000. The two
-handwritten rules come out at exactly zero, as they must, since a rule is not fitted and cannot
-care which rows we withheld.</caption></table></div>
-
-<h3>The best classifier turned out to be the worst strategy</h3>
-
-<p>Logistic regression ranks days better than anything else and makes the least money. Those are
-different questions: AUC asks whether the ordering is right, and Sharpe asks whether the days it
-chose to hold went up by more than the trading cost.</p>
-
-<div class="tw"><table id="t-strategy"><caption>Pre-holdout, out of fold, no trading costs.
-<code>matched</code> is the Sharpe you would get holding the same <em>number</em> of days chosen
-at random, which separates how well a model chose from how often it was invested.</caption></table></div>
-
-<p>Most of the fall is not skill. Logistic is invested 22% of the time, and sitting in cash
-forfeits the market's drift whatever you pick — Sharpe scales roughly with the square root of
-exposure, so its ceiling was already 0.22 against buy-and-hold's 0.48. Then it picked slightly
-worse-than-random days, and then costs took the rest.</p>
-
-<p>Errors cluster where the barriers are widest. The error rate climbs from about 0.48 in the
-calmest fifth of days to 0.64 in the most volatile fifth, and 2008 is the worst year for every
-model. The costliest individual mistakes are almost all October 2008, January 2009 and March
-2020, at ordinary confidence between 0.52 and 0.70. The models were not unusually sure, just
-ordinarily sure and badly wrong. It is the same mechanism as the 0.544 floor: the conditions
-they fail in are the conditions their edge is built on.</p>
-
-<h2 id="explore">5. Try it yourself</h2>
-
-<p>This panel changes how the model is <em>evaluated</em>, not what the strategy does. All three
-schemes score the same model on the same days; only the training rows differ. We precomputed the
-position series and the browser does cost and execution arithmetic on top, which is how 1,764
-slider combinations fit in half a megabyte.</p>
-
-<p>Worth trying: switch between purged and the control and watch the curve barely move. Then
-drag the cost slider with the trees selected, and again with buy-and-hold, to see turnover do
-its damage.</p>
-
-<div id="banner" class="box">Loading <code>data.json</code>…</div>
-
-<div class="demo">
-  <div class="ctl">
-    <div><label for="ticker">ETF</label><select id="ticker"></select></div>
-    <div><label for="model">Model</label><select id="model"></select></div>
-    <div><label for="scheme">Scheme</label><select id="scheme">
-      <option value="purged" selected>Purged + embargo</option>
-      <option value="control_kfold">Standard K-fold (control)</option>
-      <option value="walk_forward">Walk-forward</option></select></div>
-    <fieldset id="embWrap"><label for="embargo">Embargo · <span class="v" id="embVal">0</span> bars</label>
-      <input type="range" id="embargo" min="0" max="20" value="0"></fieldset>
-    <div><label for="cost">Cost · <span class="v" id="costVal">0</span> bps</label>
-      <input type="range" id="cost" min="0" max="20" value="0"></div>
-    <div><label for="lag">Execution</label><select id="lag">
-      <option value="0" selected>Same bar</option><option value="1">One bar late</option>
-      </select></div>
+  <div class="note flag"><span class="tag">Read this before the results</span>
+    <p><b>An AUC of 0.544 means no signal, not a weak one.</b> We generated fake price series
+    with no predictability at all, ran the whole pipeline on them, and the full feature set still
+    scored 0.544.</p>
+    <p>The cause is our own label. High volatility means wide barriers, wide barriers are less
+    likely to be touched, an untouched barrier times out, and a timeout counts as 0. So trailing
+    volatility predicts the label without any skill at predicting direction. Among days that did
+    touch a barrier, 50.9% went up — a coin flip, exactly as it should be.</p>
+    <p>Without that check we would have reported an AUC of 0.55 as a modest edge when it is the
+    floor. Every AUC below is read against 0.544.</p>
   </div>
-  <canvas id="chart" height="280" style="margin-top:16px" aria-label="Equity curve"></canvas>
-  <div class="legend">
-    <span><span class="sw" style="background:var(--accent)"></span><span id="legSel">model</span></span>
-    <span><span class="sw" style="background:var(--mid)"></span>buy &amp; hold, same settings</span>
+
+  <p>The same synthetic machinery told us how small a signal we could have detected: we start to
+  pick up predictability at an autocorrelation of about 0.4. The real figure in these funds runs
+  from −0.107 to −0.010, an order of magnitude smaller and the wrong sign. So when we find
+  nothing, we can say we found no edge above roughly 0.4 rather than just shrugging.</p>
+</section>
+
+<section id="results">
+  <h2><span class="num">08</span>Results</h2>
+  <div class="tw"><table id="t-auc"><caption><b>Table 2.</b> AUC by model and scheme, averaged
+  over the five funds. Logistic regression is the only model clearly above the 0.544 floor. Both
+  handwritten rules sit below it, which means a model knowing nothing but trailing volatility
+  would beat our baseline.</caption></table></div>
+
+  <p>The gap we went looking for — control minus purged — is effectively zero. Swept across every
+  embargo from 0 to 20 bars, the largest value anywhere is about one thousandth of an AUC point,
+  against a single fold's standard error of seventeen thousandths. Its direction even changes
+  from fund to fund, so we cannot tell you its sign.</p>
+
+  <div class="tw"><table id="t-gap"><caption><b>Table 3.</b> Control minus purged, in AUC × 1000.
+  The two handwritten rules come out at exactly zero, as they must, since a rule is not fitted
+  and cannot care which rows we withheld.</caption></table></div>
+
+  <h3>The best classifier turned out to be the worst strategy</h3>
+  <p>Logistic ranks days better than anything else and makes the least money. Those are different
+  questions: AUC asks whether the ordering is right, Sharpe asks whether the days it chose to
+  hold went up by more than the trading cost.</p>
+
+  <div class="tw"><table id="t-strategy"><caption><b>Table 4.</b> Pre-holdout, out of fold, no
+  trading costs. <code>matched</code> is the Sharpe from holding the same <i>number</i> of days
+  chosen at random, which separates how well a model chose from how often it was
+  invested.</caption></table></div>
+
+  <p>Most of the fall is not skill. Logistic is invested 22% of the time, and sitting in cash
+  forfeits the market's drift whatever you pick — Sharpe scales roughly with the square root of
+  exposure, so its ceiling was already 0.22 against buy-and-hold's 0.48. Then it picked slightly
+  worse-than-random days, and costs took the rest.</p>
+</section>
+
+<section id="errors">
+  <h2><span class="num">09</span>Error analysis</h2>
+  <p>An error is a day a model said act and the lower barrier fell first, out of fold, so every
+  one is a day it had genuinely not been trained on. Acting every day is wrong 59.5% of the time;
+  meta-labelling is wrong 51.3%, logistic 53.2%, the trees 55.5%.</p>
+  <p><b>Errors concentrate where the barriers are widest.</b> The error rate climbs from about
+  0.48 in the calmest fifth of days to 0.64 in the most volatile fifth, and 2008 is the worst
+  year for every model. The costliest individual mistakes are almost all October 2008, January
+  2009 and March 2020, mostly IWM, at ordinary confidence between 0.52 and 0.70 — the models were
+  not unusually sure, just ordinarily sure and badly wrong.</p>
+  <p>It is the same mechanism as the 0.544 floor. The conditions they fail in are the conditions
+  their edge is built on, which is worth saying plainly rather than burying: these models are
+  least reliable exactly when it would matter most.</p>
+</section>
+
+<section id="lab">
+  <h2><span class="num">10</span>Strategy lab</h2>
+  <p>This changes how the model is <i>evaluated</i>, not what the strategy does. All three schemes
+  score the same model on the same days; only the training rows differ. We precomputed the
+  position series and the browser does cost and execution arithmetic on top, which is how 1,764
+  slider combinations fit in half a megabyte.</p>
+  <p>Worth trying: switch between purged and the control and watch the curve barely move. Then
+  drag the cost slider with the trees selected, and again with buy-and-hold, to see turnover do
+  its damage. Hover the chart to inspect any day.</p>
+
+  <div id="banner" class="note">Loading <code>data.json</code>…</div>
+
+  <figure>
+    <div class="fig-hd"><b>Figure 3 · Strategy lab</b><span id="lab-sub"></span></div>
+    <div class="ctl">
+      <div><label for="ticker">ETF</label><select id="ticker"></select></div>
+      <div><label for="model">Model</label><select id="model"></select></div>
+      <div><label for="scheme">Scheme</label><select id="scheme">
+        <option value="purged" selected>Purged + embargo</option>
+        <option value="control_kfold">Standard K-fold (control)</option>
+        <option value="walk_forward">Walk-forward</option></select></div>
+      <fieldset id="embWrap"><label for="embargo">Embargo · <span class="v" id="embVal">0</span> bars</label>
+        <input type="range" id="embargo" min="0" max="20" value="0"></fieldset>
+      <div><label for="cost">Cost · <span class="v" id="costVal">0</span> bps</label>
+        <input type="range" id="cost" min="0" max="20" value="0"></div>
+      <div><label for="lag">Execution</label><select id="lag">
+        <option value="0" selected>Same bar</option><option value="1">One bar late</option>
+        </select></div>
+    </div>
+    <div class="canvas-wrap" style="margin-top:16px">
+      <canvas id="chart" height="290" aria-label="Equity curve against buy and hold"></canvas>
+      <div class="tip" id="tip" role="status"></div>
+    </div>
+    <div class="legend">
+      <span><span class="sw" style="background:var(--accent)"></span><span id="legSel">model</span></span>
+      <span><span class="sw" style="background:var(--mid)"></span>buy &amp; hold, same settings</span>
+    </div>
+    <div class="read">
+      <div><div class="k">Sharpe</div><div class="n" id="s-sharpe">—</div></div>
+      <div><div class="k">± s.e.</div><div class="n" id="s-se">—</div></div>
+      <div><div class="k">Max drawdown</div><div class="n" id="s-dd">—</div></div>
+      <div><div class="k">Turnover</div><div class="n" id="s-to">—</div></div>
+      <div><div class="k">Exposure</div><div class="n" id="s-ex">—</div></div>
+    </div>
+    <figcaption><b>Figure 3.</b> Out-of-fold equity, pre-holdout, starting at 1.00×. Hover or drag
+    across the chart to read any day. "One bar late" delays the position by a bar — a real cost of
+    being slow, though not the same as filling at the next open, which we could not do as
+    arithmetic on a position series.</figcaption>
+  </figure>
+</section>
+
+<section id="holdout">
+  <h2><span class="num">11</span>The holdout, opened once</h2>
+  <p>We fixed 2023–2025 in <code>config.yaml</code> before any modelling and did not look at it
+  until everything above was finished. Then we fitted each model once, predicted those years, and
+  wrote the numbers into our decision log before discussing them.</p>
+
+  <div class="tw"><table id="t-holdout"><caption><b>Table 5.</b> Holdout results, averaged over
+  the five funds, no costs. Precision is read against the positive rate of 0.437.</caption></table></div>
+
+  <div class="key"><span class="tag">The purged estimate held</span>
+    <p>Logistic scored 0.5755 under purged cross-validation before the holdout and <b>0.5754</b>
+    on it. Every model held within 0.024 on three years nobody had looked at.</p>
+    <p>That is the strongest thing on this page. Whatever our pipeline was measuring, it measured
+    it stably, which is exactly what we built it to establish.</p>
   </div>
-  <div class="read">
-    <div><div class="k">Sharpe</div><div class="n" id="s-sharpe">—</div></div>
-    <div><div class="k">± s.e.</div><div class="n" id="s-se">—</div></div>
-    <div><div class="k">Max drawdown</div><div class="n" id="s-dd">—</div></div>
-    <div><div class="k">Turnover</div><div class="n" id="s-to">—</div></div>
-    <div><div class="k">Exposure</div><div class="n" id="s-ex">—</div></div>
+
+  <p>Buy-and-hold still won, its Sharpe rising from 0.480 to 1.116. That is the market and not
+  skill — SPY returned 88% over those years and QQQ 138%. Every strategy roughly doubled for the
+  same reason and none beat the index. Nothing reaches a t-statistic of 2, because 744 days gives
+  a Sharpe standard error of 0.580 rather than 0.242.</p>
+
+  <div class="note flag"><span class="tag">Against us</span>
+    <p><b>Our one significant finding reversed.</b> Before the holdout, logistic's selection edge
+    was −0.164 with a t of −2.36, the only result we had that cleared two standard errors. We
+    wrote that it was measurably picking bad days. On the holdout the same model's edge is
+    <b>+0.179</b>.</p>
+    <p>Something that flips sign out of sample was noise, so that significance was a false
+    positive — the exact failure this project is about. We found it in our own strongest claim,
+    which is why we are telling you rather than dropping it.</p>
   </div>
-</div>
 
-<p class="aside">"One bar late" delays the position by a bar. It is a real cost of being
-slow, but it is not the same as filling at the next open, which we could not do as
-arithmetic on a position series.</p>
+  <p>The trees' holdout edge of +0.292 with a t of 3.4 is the best-looking number in that table
+  and we are not claiming it. It is one figure among roughly sixty, from five funds, and it
+  quadrupled from +0.071 before the holdout, which is what noise does. Its Deflated Sharpe Ratio
+  is 0.860, short of any bar we would accept. That ratio asks whether our best model beat what the
+  luckiest of five skill-less attempts would have scored, and the answer is not clearly yes.</p>
+</section>
 
-<h2 id="holdout">6. The holdout, opened once</h2>
+<section id="limits">
+  <h2><span class="num">12</span>What we would not claim</h2>
+  <ul>
+    <li>Our 4,302 rows per fund carry about 662 independent observations. Most differences we
+    could report are smaller than their own uncertainty, which is a property of daily data rather
+    than something better code would fix.</li>
+    <li><b>Barrier width is our most consequential single choice</b>, and we fixed it before
+    scoring anything. Afterwards we measured what it cost. Narrower would have been worse, not
+    better: at ±1σ the model scores 0.505 against a floor of 0.502, which is nothing at all. Wider
+    would have scored slightly higher at the price of more effective sample. We could not act on
+    any of this even if we wanted to, because the holdout was already open.
+    <div class="tw"><table id="t-bw"><caption><b>Table 6.</b> Barrier width against what the model
+    can actually find. The floor moves with the width, because wide barriers time out and trailing
+    volatility predicts timeouts, so only the lift is comparable across rows.</caption></table></div></li>
+    <li>Our label merges "went down" with "went nowhere", and only the second is predictable from
+    volatility. That is where the 0.544 floor comes from.</li>
+    <li>The five funds share calendar dates, so rows overlap across funds as well as across time.
+    We fitted one model per fund to keep purging one-dimensional, which sidesteps the problem
+    rather than solving it.</li>
+    <li>Four of five folds train partly on the future, so the cross-validated equity curves measure
+    generalisation rather than simulating trading. Walk-forward does not do this, and it agrees.</li>
+    <li>Our Sharpe standard error assumes independent returns. Daily returns are serially
+    correlated and volatility clusters, so 0.242 understates it.</li>
+    <li>No embargo we could afford covers a 200-day moving average, so a little feature overlap
+    survives at every fold edge.</li>
+    <li>The holdout is 744 days. It confirmed that our AUC estimate held, but it cannot resolve any
+    difference between strategies.</li>
+  </ul>
+</section>
 
-<p>We fixed 2023–2025 in <code>config.yaml</code> before any modelling and did not look at it
-until everything above was finished. Then we fitted each model once, predicted those years, and
-wrote the numbers into our decision log before discussing them.</p>
+<section id="reproduce">
+  <h2><span class="num">13</span>Reproduce it</h2>
+  <p>Everything on this page comes out of the repository, from cached data that ships with it. No
+  credentials and no downloads. The two model scripts dominate the runtime.</p>
+  <div class="repro">
+    <button id="copy" type="button">Copy</button>
+    <pre id="cmds"><span class="c"># setup</span>
+python -m venv .venv
+python -m pip install -r requirements.lock.txt
 
-<div class="tw"><table id="t-holdout"><caption>Holdout results, averaged over the five funds, no
-costs. Precision is read against the positive rate of 0.437.</caption></table></div>
+<span class="c"># rebuild everything this page shows</span>
+python src/data_process.py
+python scripts/build_labels.py
+python scripts/run_models.py
+python scripts/run_backtest.py
+python scripts/open_holdout.py
+python scripts/build_site_data.py
+python scripts/build_site_findings.py
 
-<div class="answer">
-  <h3>The purged estimate held</h3>
-  <p>Logistic scored 0.5755 under purged cross-validation before the holdout and <b>0.5754</b>
-  on it. Every model held within 0.024 on three years nobody had looked at.</p>
-  <p>That is the strongest thing on this page. Whatever our pipeline was measuring, it measured
-  it stably, which is exactly what we built it to establish.</p>
-</div>
-
-<p>Buy-and-hold still won, with its Sharpe rising from 0.480 to 1.116. That is the market and not
-skill — SPY returned 88% over those years and QQQ 138%. Every strategy roughly doubled for the
-same reason and none beat the index. Nothing reaches a t-statistic of 2, because 744 days gives a
-Sharpe standard error of 0.580 rather than 0.242.</p>
-
-<div class="box flag">
-  <span class="tag">Against us</span>
-  <p><b>Our one significant finding reversed.</b> Before the holdout, logistic's selection edge
-  was −0.164 with a t of −2.36, the only result we had that cleared two standard errors. We wrote
-  that it was measurably picking bad days. On the holdout the same model's edge is <b>+0.179</b>.</p>
-  <p>Something that flips sign out of sample was noise, so that significance was a false positive
-  — the exact failure this project is about. We found it in our own strongest claim, which is why
-  we are telling you rather than dropping it.</p>
-</div>
-
-<p>The trees' holdout edge of +0.292 with a t of 3.4 is the best-looking number in that table and
-we are not claiming it. It is one figure among roughly sixty, from five funds, and it quadrupled
-from +0.071 before the holdout, which is what noise does. Its Deflated Sharpe Ratio is 0.860,
-short of any bar we would accept. That ratio exists to price exactly this kind of thing: it asks
-whether our best model beat what the luckiest of five skill-less attempts would have scored, and
-the answer is not clearly yes.</p>
-
-<h2 id="limits">7. What we would not claim</h2>
-
-<ul>
-<li>Our 4,302 rows per fund carry about 662 independent observations. Most differences we could
-report are smaller than their own uncertainty, and that is a property of daily data rather than
-something better code would fix.</li>
-<li><b>Barrier width is our most consequential single choice</b>, and we fixed it before we
-had scored anything. Afterwards we measured what it cost us. Narrower barriers would have been
-worse, not better: at ±1σ the model scores 0.505 against a floor of 0.502, which is nothing at
-all. Wider would have scored slightly higher, at the price of more effective sample. We could
-not act on any of this even if we had wanted to, because the holdout was already open.
-<div class="tw"><table id="t-bw"><caption>Barrier width against what the model can actually
-find. The floor moves with the width, because wide barriers time out and trailing volatility
-predicts timeouts, so only the lift is comparable across rows.</caption></table></div></li>
-<li>Our label merges "went down" with "went nowhere", and only the second is predictable from
-volatility. That is where the 0.544 floor comes from.</li>
-<li>The five funds share calendar dates, so rows overlap across funds as well as across time. We
-fitted one model per fund to keep purging one-dimensional, which sidesteps the problem rather
-than solving it.</li>
-<li>Four of five folds train partly on the future, so the cross-validated equity curves measure
-generalisation rather than simulating trading. Walk-forward does not do this, and it agrees.</li>
-<li>Our Sharpe standard error assumes independent returns. Daily returns are serially correlated
-and volatility clusters, so 0.242 understates it.</li>
-<li>No embargo we could afford covers a 200-day moving average, so a little feature overlap
-survives at every fold edge.</li>
-<li>The holdout is 744 days. It confirmed that our AUC estimate held, but it cannot resolve any
-difference between strategies.</li>
-</ul>
+<span class="c"># check it</span>
+python -m pytest -q                   <span class="c"># 161 tests</span>
+python scripts/check_site_data.py     <span class="c"># site vs Python agree</span></pre>
+  </div>
+  <p class="aside">The splits are code, not prose: <code>PurgedKFold</code>,
+  <code>WalkForward</code> and <code>NaiveKFold</code> in <code>src/cv.py</code>, all built on the
+  one overlap rule in <code>src/purging.py</code>. The test suite asserts the properties rather
+  than the outputs — that no surviving training row's window overlaps its test fold, and that the
+  embargo is exclusive at the start and inclusive at the end.</p>
+</section>
 
 <footer>
   <p>Every decision behind this is dated and reasoned in
   <a href="https://github.com/Vansh8803/purged-cv-etf/blob/main/decision-log.md">decision-log.md</a>,
-  including the ones we reversed. Setup, reproduction steps, data access and our AI-use
+  including the ones we reversed. Setup, reproduction steps, data access, citations and our AI-use
   disclosure are in the
   <a href="https://github.com/Vansh8803/purged-cv-etf/blob/main/README.md">README</a>.</p>
   <p id="built"></p>
 </footer>
+
+</main>
+</div>
 </div>
 
 <script>
@@ -489,145 +680,173 @@ const fx = {n:d=>x=>x==null||Number.isNaN(x)?"—":(+x).toFixed(d),
             pc:d=>x=>x==null?"—":((+x)*100).toFixed(d)+"%",
             k:d=>x=>x==null?"—":((+x)*1000).toFixed(d)};
 
-function hidpi(c, h){
-  const r = window.devicePixelRatio||1, w = c.clientWidth;
-  c.width = w*r; c.height = h*r;
-  const g = c.getContext("2d"); g.setTransform(r,0,0,r,0,0); g.clearRect(0,0,w,h);
+function hidpi(c,h){
+  const r=window.devicePixelRatio||1, w=c.clientWidth;
+  c.width=w*r; c.height=h*r;
+  const g=c.getContext("2d"); g.setTransform(r,0,0,r,0,0); g.clearRect(0,0,w,h);
   return {g,w,h};
 }
 
-/* ---------- table helper ---------- */
-function table(id, cols, rows, head){
-  const t = el(id); if(!t) return;
-  if(!rows.length){ t.hidden = true; return; }
-  const cap = t.querySelector("caption")?.outerHTML || "";
-  t.innerHTML = cap +
-    `<thead><tr><th>${head}</th>${cols.map(c=>`<th>${c[1]}</th>`).join("")}</tr></thead><tbody>` +
-    rows.map(([lab,r])=>`<tr><td>${lab}</td>${cols.map(([k,,f,em])=>
-      `<td${em&&em(r)?` class="${em(r)}"`:""}>${f(r[k])}</td>`).join("")}</tr>`).join("") +
-    `</tbody>`;
+/* ---------- section rail ---------- */
+function spy(){
+  const links=[...document.querySelectorAll("nav.rail a")];
+  const map=new Map(links.map(a=>[a.getAttribute("href").slice(1),a]));
+  const io=new IntersectionObserver(es=>{
+    es.forEach(e=>{
+      const a=map.get(e.target.id); if(!a) return;
+      if(e.isIntersecting){
+        links.forEach(l=>l.removeAttribute("aria-current"));
+        a.setAttribute("aria-current","true");
+        if(window.innerWidth<1000) a.scrollIntoView({block:"nearest",inline:"center"});
+      }
+    });
+  },{rootMargin:"-12% 0px -80% 0px"});
+  document.querySelectorAll("main section").forEach(s=>io.observe(s));
+}
+
+/* ---------- tables ---------- */
+function table(id,cols,rows,head){
+  const t=el(id); if(!t) return;
+  if(!rows.length){ t.hidden=true; return; }
+  const cap=t.querySelector("caption")?.outerHTML||"";
+  t.innerHTML=cap+`<thead><tr><th>${head}</th>${cols.map(c=>`<th>${c[1]}</th>`).join("")}</tr></thead><tbody>`
+    +rows.map(([lab,r])=>`<tr><td>${lab}</td>${cols.map(([k,,f,em])=>
+      `<td${em&&em(r)?` class="${em(r)}"`:""}>${f(r[k])}</td>`).join("")}</tr>`).join("")
+    +`</tbody>`;
 }
 const byModel = o => DATA.meta.models.filter(m=>o&&o[m]).map(m=>[nice(m),o[m]]);
 
-/* ---------- 1. label explorer ---------- */
-const LD = {};
-function drawLabel(){
-  const d = F.label_demo, i = +el("ld-slider").value;
-  const span = 36, from = Math.max(0, i-8), to = Math.min(d.dates.length-1, from+span);
-  const {g,w,h} = hidpi(el("ld-canvas"), 300);
-  const pad = {l:48,r:10,t:12,b:22}, iw = w-pad.l-pad.r, ih = h-pad.t-pad.b;
+function renderTables(){
+  if(!F||!Object.keys(F).length){
+    el("built").textContent="Results tables are not built yet. Run scripts/build_site_findings.py.";
+    return;
+  }
+  if(F.data) table("t-data",[["pre_holdout","rows used",fx.n(0)],["label_1","label 1",fx.n(3)],
+    ["first","from",String],["last","to",String]],F.data.map(r=>[r.ticker,r]),"Fund");
+  if(F.auc) table("t-auc",Object.keys(F.auc.logistic||{}).map(c=>
+    [c,nice(c),fx.n(4),r=>c==="purged_kfold"&&r[c]>F.floor_synthetic?"hi":""]),byModel(F.auc),"Model");
+  if(F.gap_range) table("t-gap",[["min","min",fx.k(2)],["max","max",fx.k(2)],
+    ["mean","mean",fx.k(2)],["paired_se","paired s.e.",fx.k(2)]],byModel(F.gap_range),"Model");
+  if(F.strategy) table("t-strategy",[["sharpe","Sharpe",fx.n(3)],["sharpe_se","s.e.",fx.n(3)],
+    ["max_drawdown","max DD",fx.pc(1)],["turnover","turnover",fx.n(1)],
+    ["exposure","exposure",fx.pc(0)],["matched","matched",fx.n(3)],["dsr","DSR",fx.n(3)]],
+    byModel(F.strategy),"Model");
+  if(F.barrier_sensitivity) table("t-bw",[["label1","label 1",fx.n(3)],
+    ["timeout","timeout",fx.pc(0)],["window","window (bars)",fx.n(1)],
+    ["effN","effective N",fx.n(0)],["auc","AUC",fx.n(4)],["floor","floor",fx.n(4)],
+    ["lift","lift",fx.n(4),r=>r.lift>0.04?"hi":""]],
+    Object.keys(F.barrier_sensitivity).map(k=>[(+k).toFixed(1)+"σ",F.barrier_sensitivity[k]]),
+    "Barrier width");
+  if(F.holdout) table("t-holdout",[["auc","AUC",fx.n(4)],["precision","precision",fx.n(3)],
+    ["coverage","coverage",fx.pc(0)],["sharpe","Sharpe",fx.n(3)],["sharpe_t","t",fx.n(2)],
+    ["total_return","total",fx.pc(0)],["dsr","DSR",fx.n(3)]],byModel(F.holdout),"Model");
+  el("built").textContent=`Built ${DATA.meta.built}. Barriers ±${DATA.meta.barrier_mult}σ, `
+    +`${DATA.meta.horizon_days}-bar horizon, ${DATA.meta.n_folds} folds.`;
+}
 
-  let lo=Infinity, hi=-Infinity;
-  for(let k=from;k<=to;k++){ lo=Math.min(lo,d.low[k]); hi=Math.max(hi,d.high[k]); }
+/* ---------- Figure 1 ---------- */
+function drawLabel(){
+  const d=F.label_demo, i=+el("ld-slider").value;
+  const from=Math.max(0,i-8), to=Math.min(d.dates.length-1,from+36);
+  const {g,w,h}=hidpi(el("ld-canvas"),300);
+  const pad={l:50,r:10,t:12,b:22}, iw=w-pad.l-pad.r, ih=h-pad.t-pad.b;
+  let lo=Infinity,hi=-Infinity;
+  for(let k=from;k<=to;k++){lo=Math.min(lo,d.low[k]);hi=Math.max(hi,d.high[k]);}
   lo=Math.min(lo,d.lower[i]); hi=Math.max(hi,d.upper[i]);
   const sp=(hi-lo)||1; lo-=sp*.08; hi+=sp*.08;
-  const X = k => pad.l + ((k-from)/(to-from))*iw;
-  const Y = v => pad.t + ih - ((v-lo)/(hi-lo))*ih;
+  const X=k=>pad.l+((k-from)/(to-from))*iw, Y=v=>pad.t+ih-((v-lo)/(hi-lo))*ih;
 
   g.strokeStyle=css("--grid"); g.fillStyle=css("--faint");
   g.font="10px "+css("--sans"); g.lineWidth=1;
-  for(let q=0;q<=3;q++){ const v=lo+(hi-lo)*q/3, y=Y(v);
-    g.beginPath(); g.moveTo(pad.l,y); g.lineTo(w-pad.r,y); g.stroke();
-    g.textAlign="right"; g.textBaseline="middle"; g.fillText(v.toFixed(0), pad.l-7, y); }
+  for(let q=0;q<=3;q++){const v=lo+(hi-lo)*q/3,y=Y(v);
+    g.beginPath();g.moveTo(pad.l,y);g.lineTo(w-pad.r,y);g.stroke();
+    g.textAlign="right";g.textBaseline="middle";g.fillText(v.toFixed(0),pad.l-7,y);}
 
-  // daily high-low ranges
+  const endBar=Math.min(i+10,to);
+  g.fillStyle=css("--accent-lo"); g.fillRect(X(i),pad.t,Math.max(2,X(endBar)-X(i)),ih);
+
   g.strokeStyle=css("--faint"); g.lineWidth=1.5; g.globalAlpha=.5;
-  for(let k=from;k<=to;k++){ g.beginPath(); g.moveTo(X(k),Y(d.high[k])); g.lineTo(X(k),Y(d.low[k])); g.stroke(); }
+  for(let k=from;k<=to;k++){g.beginPath();g.moveTo(X(k),Y(d.high[k]));g.lineTo(X(k),Y(d.low[k]));g.stroke();}
   g.globalAlpha=1;
 
-  // the ten-bar window being judged
-  const endBar = Math.min(i+10, to);
-  g.fillStyle=css("--soft"); g.globalAlpha=.75;
-  g.fillRect(X(i), pad.t, Math.max(2,X(endBar)-X(i)), ih); g.globalAlpha=1;
-
-  // barriers across that window
-  g.setLineDash([4,3]); g.lineWidth=1.6;
+  g.setLineDash([4,3]); g.lineWidth=1.8;
   g.strokeStyle=css("--up");
-  g.beginPath(); g.moveTo(X(i),Y(d.upper[i])); g.lineTo(X(endBar),Y(d.upper[i])); g.stroke();
+  g.beginPath();g.moveTo(X(i),Y(d.upper[i]));g.lineTo(X(endBar),Y(d.upper[i]));g.stroke();
   g.strokeStyle=css("--down");
-  g.beginPath(); g.moveTo(X(i),Y(d.lower[i])); g.lineTo(X(endBar),Y(d.lower[i])); g.stroke();
+  g.beginPath();g.moveTo(X(i),Y(d.lower[i]));g.lineTo(X(endBar),Y(d.lower[i]));g.stroke();
   g.setLineDash([]);
 
-  // close line
   g.strokeStyle=css("--ink"); g.lineWidth=1.8; g.beginPath();
-  for(let k=from;k<=to;k++){ const x=X(k), y=Y(d.close[k]); k===from?g.moveTo(x,y):g.lineTo(x,y); }
+  for(let k=from;k<=to;k++){const x=X(k),y=Y(d.close[k]); k===from?g.moveTo(x,y):g.lineTo(x,y);}
   g.stroke();
 
-  // decision day and resolution
-  g.fillStyle=css("--ink");
-  g.beginPath(); g.arc(X(i),Y(d.close[i]),3.5,0,7); g.fill();
-  const off = d.t1_off[i];
-  if(off>0 && i+off<=to){
-    const rb = i+off;
-    g.fillStyle = d.label[i]===1?css("--up"):css("--down");
-    g.beginPath(); g.arc(X(rb), Y(d.label[i]===1?d.high[rb]:d.low[rb]), 4.5,0,7); g.fill();
+  g.fillStyle=css("--ink"); g.beginPath(); g.arc(X(i),Y(d.close[i]),3.5,0,7); g.fill();
+  const off=d.t1_off[i];
+  if(off>0&&i+off<=to){
+    const rb=i+off, up=d.touch[i]==="upper";
+    g.fillStyle=up?css("--up"):css("--down");
+    g.beginPath(); g.arc(X(rb),Y(up?d.high[rb]:d.low[rb]),4.5,0,7); g.fill();
   }
-
-  const wid = (d.upper[i]-d.lower[i])/d.close[i];
-  el("ld-date").textContent = d.dates[i];
-  el("ld-i").textContent = i;
-  el("ld-width").textContent = (wid*100).toFixed(1)+"%";
-  el("ld-bars").textContent = off>0 ? off+(off===1?" bar":" bars") : "—";
-  el("ld-label").textContent = d.label[i];
-  el("ld-touch").textContent = off>0
-    ? (d.touch[i]==="timeout" ? "timed out" : d.touch[i])
-    : "—";
+  const wid=(d.upper[i]-d.lower[i])/d.close[i];
+  el("ld-date").textContent=d.dates[i];
+  el("ld-i").textContent=i;
+  el("ld-width").textContent=(wid*100).toFixed(1)+"%";
+  el("ld-bars").textContent=off>0?off+(off===1?" bar":" bars"):"—";
+  el("ld-label").textContent=d.label[i];
+  const t=el("ld-touch");
+  t.textContent=off>0?(d.touch[i]==="timeout"?"timed out":d.touch[i]):"—";
+  t.className="n "+(d.touch[i]==="upper"?"hi":d.touch[i]==="lower"?"lo":"");
 }
 
-/* ---------- 2. fold geometry ---------- */
-const FG = {shuffled:false, n:150, folds:5, win:6};
+/* ---------- Figure 2 ---------- */
+const FG={shuffled:false,n:150,folds:5,win:6};
 function foldAssign(){
   const idx=[...Array(FG.n).keys()];
-  if(FG.shuffled){ let s=20261014;
+  if(FG.shuffled){let s=20261014;
     const rnd=()=>((s=(s*1103515245+12345)&0x7fffffff)/0x7fffffff);
-    for(let i=idx.length-1;i>0;i--){const j=Math.floor(rnd()*(i+1));[idx[i],idx[j]]=[idx[j],idx[i]];}
-  }
+    for(let i=idx.length-1;i>0;i--){const j=Math.floor(rnd()*(i+1));[idx[i],idx[j]]=[idx[j],idx[i]];}}
   const per=Math.ceil(FG.n/FG.folds), of=new Array(FG.n);
-  idx.forEach((row,k)=>{ of[row]=Math.min(FG.folds-1,Math.floor(k/per)); });
+  idx.forEach((row,k)=>{of[row]=Math.min(FG.folds-1,Math.floor(k/per));});
   return of;
 }
 function drawFolds(){
-  const of = foldAssign();
-  const {g,w,h} = hidpi(el("fg-canvas"), 190);
-  const rowH = Math.min(26,(h-16)/FG.folds), cw = (w-34)/FG.n;
+  const of=foldAssign();
+  const {g,w,h}=hidpi(el("fg-canvas"),190);
+  const rowH=Math.min(26,(h-16)/FG.folds), cw=(w-34)/FG.n;
   g.font="10px "+css("--sans"); g.textBaseline="middle";
-  let leaked=0, train=0;
-  for(let f=0; f<FG.folds; f++){
-    const y = 8 + f*rowH;
-    g.fillStyle=css("--faint"); g.textAlign="left"; g.fillText(String(f), 2, y+rowH/2);
+  let leaked=0,train=0;
+  for(let f=0;f<FG.folds;f++){
+    const y=8+f*rowH;
+    g.fillStyle=css("--faint"); g.textAlign="left"; g.fillText(String(f),2,y+rowH/2);
     for(let i=0;i<FG.n;i++){
-      const isTest = of[i]===f;
-      let leaks=false;
-      if(!isTest){ train++;
-        for(let j=Math.max(0,i-FG.win); j<=Math.min(FG.n-1,i+FG.win); j++)
-          if(of[j]===f){ leaks=true; break; }
-        if(leaks) leaked++;
-      }
-      g.fillStyle = isTest?css("--accent") : leaks?css("--warn") : css("--grid");
-      g.fillRect(20+i*cw, y+2, Math.max(1,cw-0.5), rowH-6);
+      const isTest=of[i]===f; let leaks=false;
+      if(!isTest){train++;
+        for(let j=Math.max(0,i-FG.win);j<=Math.min(FG.n-1,i+FG.win);j++)
+          if(of[j]===f){leaks=true;break;}
+        if(leaks)leaked++;}
+      g.fillStyle=isTest?css("--accent"):leaks?css("--warn"):css("--grid");
+      g.fillRect(20+i*cw,y+2,Math.max(1,cw-0.5),rowH-6);
     }
   }
-  el("fg-toy").textContent = (100*leaked/train).toFixed(1)+"%";
-  // Blocks: measured. Shuffled: measured once and recorded, since we ship only
-  // the contiguous control's position series.
-  const measured = F?.leakage?.control_kfold?.train_leaked;
-  el("fg-real").textContent = FG.shuffled ? "88.05%"
-    : measured != null ? (100*measured).toFixed(2)+"%" : "0.33%";
-  el("fg-real").className = FG.shuffled ? "n lo" : "n hi";
+  el("fg-toy").textContent=(100*leaked/train).toFixed(1)+"%";
+  const measured=F?.leakage?.control_kfold?.train_leaked;
+  el("fg-real").textContent=FG.shuffled?"88.05%"
+    :measured!=null?(100*measured).toFixed(2)+"%":"0.33%";
+  el("fg-real").className=FG.shuffled?"n lo":"n hi";
 }
 function setFold(sh){
   FG.shuffled=sh;
-  el("fg-contig").setAttribute("aria-pressed", String(!sh));
-  el("fg-shuf").setAttribute("aria-pressed", String(sh));
+  el("fg-contig").setAttribute("aria-pressed",String(!sh));
+  el("fg-shuf").setAttribute("aria-pressed",String(sh));
   drawFolds();
 }
 
-/* ---------- 3. strategy panel ---------- */
+/* ---------- Figure 3 ---------- */
 function decodeRLE(runs,n){const o=new Float64Array(n);let i=0,v=0;
   for(const r of runs){o.fill(v,i,Math.min(i+r,n));i+=r;v=v?0:1;}return o;}
 function runBT(pos0,rets,bps,lag){
   const n=rets.length,pos=new Float64Array(n);
-  for(let i=lag;i<n;i++) pos[i]=pos0[i-lag];
+  for(let i=lag;i<n;i++)pos[i]=pos0[i-lag];
   const net=new Float64Array(n),eqv=new Float64Array(n),c=bps/1e4;
   let eq=1,tr=0,held=0,prev=0;
   for(let i=0;i<n;i++){const t=Math.abs(pos[i]-prev);
@@ -636,42 +855,80 @@ function runBT(pos0,rets,bps,lag){
   return {net,eq:eqv,turnover:tr/n*PERIODS,exposure:held/n};
 }
 function statsOf(r){
-  const n=r.net.length; let m=0; for(const x of r.net) m+=x; m/=n;
-  let v=0; for(const x of r.net) v+=(x-m)*(x-m);
+  const n=r.net.length; let m=0; for(const x of r.net)m+=x; m/=n;
+  let v=0; for(const x of r.net)v+=(x-m)*(x-m);
   const sd=Math.sqrt(v/(n-1)), srd=sd===0?0:m/sd;
-  let pk=-Infinity,dd=0; for(const e of r.eq){ if(e>pk)pk=e; dd=Math.max(dd,1-e/pk); }
+  let pk=-Infinity,dd=0; for(const e of r.eq){if(e>pk)pk=e; dd=Math.max(dd,1-e/pk);}
   return {sharpe:srd*Math.sqrt(PERIODS),
     se:sd===0?0:Math.sqrt((1+.5*srd*srd)/n)*Math.sqrt(PERIODS),
-    dd, turnover:r.turnover, exposure:r.exposure};
+    dd,turnover:r.turnover,exposure:r.exposure};
 }
-function drawEquity(curves){
-  const {g,w,h} = hidpi(el("chart"), 280);
-  const pad={l:48,r:10,t:12,b:22}, iw=w-pad.l-pad.r, ih=h-pad.t-pad.b;
+let CUR={sel:null,bh:null,geom:null};
+function drawEquity(sel,bh,hoverIdx){
+  const {g,w,h}=hidpi(el("chart"),290);
+  const pad={l:50,r:12,t:12,b:22}, iw=w-pad.l-pad.r, ih=h-pad.t-pad.b;
   let lo=Infinity,hi=-Infinity;
-  for(const c of curves) for(const v of c.y){ if(v<lo)lo=v; if(v>hi)hi=v; }
+  for(const c of [bh,sel]) for(const v of c){if(v<lo)lo=v;if(v>hi)hi=v;}
   lo=Math.min(lo,1); hi=Math.max(hi,1);
   const sp=(hi-lo)||1; lo-=sp*.06; hi+=sp*.06;
-  const n=curves[0].y.length, X=i=>pad.l+(i/(n-1))*iw, Y=v=>pad.t+ih-((v-lo)/(hi-lo))*ih;
+  const n=sel.length, X=i=>pad.l+(i/(n-1))*iw, Y=v=>pad.t+ih-((v-lo)/(hi-lo))*ih;
+  CUR.geom={pad,iw,ih,n,X,Y,w,h};
+
   g.strokeStyle=css("--grid"); g.fillStyle=css("--faint");
   g.font="10px "+css("--sans"); g.lineWidth=1;
-  for(let k=0;k<=4;k++){ const v=lo+(hi-lo)*k/4, y=Y(v);
-    g.beginPath(); g.moveTo(pad.l,y); g.lineTo(w-pad.r,y); g.stroke();
-    g.textAlign="right"; g.textBaseline="middle"; g.fillText(v.toFixed(2)+"x", pad.l-7, y); }
-  g.textAlign="center"; g.textBaseline="top";
+  for(let k=0;k<=4;k++){const v=lo+(hi-lo)*k/4,y=Y(v);
+    g.beginPath();g.moveTo(pad.l,y);g.lineTo(w-pad.r,y);g.stroke();
+    g.textAlign="right";g.textBaseline="middle";g.fillText(v.toFixed(2)+"x",pad.l-7,y);}
+  g.textAlign="center";g.textBaseline="top";
   const st=Math.floor(n/5);
-  for(let i=0;i<n;i+=st) g.fillText(DATA.dates[i].slice(0,4), X(i), pad.t+ih+5);
-  for(const c of curves){ g.strokeStyle=c.color; g.lineWidth=c.w; g.beginPath();
-    for(let i=0;i<n;i++){const x=X(i),y=Y(c.y[i]); i?g.lineTo(x,y):g.moveTo(x,y);} g.stroke(); }
+  for(let i=0;i<n;i+=st)g.fillText(DATA.dates[i].slice(0,4),X(i),pad.t+ih+5);
+
+  for(const c of [{y:bh,col:css("--mid"),lw:1.3},{y:sel,col:css("--accent"),lw:2}]){
+    g.strokeStyle=c.col; g.lineWidth=c.lw; g.beginPath();
+    for(let i=0;i<n;i++){const x=X(i),y=Y(c.y[i]); i?g.lineTo(x,y):g.moveTo(x,y);}
+    g.stroke();
+  }
+  if(hoverIdx!=null){
+    const x=X(hoverIdx);
+    g.strokeStyle=css("--ink"); g.globalAlpha=.3; g.lineWidth=1;
+    g.beginPath(); g.moveTo(x,pad.t); g.lineTo(x,pad.t+ih); g.stroke(); g.globalAlpha=1;
+    for(const c of [{y:bh,col:css("--mid")},{y:sel,col:css("--accent")}]){
+      g.fillStyle=c.col; g.strokeStyle=css("--raise"); g.lineWidth=2;
+      g.beginPath(); g.arc(x,Y(c.y[hoverIdx]),4,0,7); g.fill(); g.stroke();
+    }
+  }
+}
+function moveTip(ev){
+  if(!CUR.geom||!CUR.sel) return;
+  const c=el("chart"), r=c.getBoundingClientRect();
+  const px=(ev.touches?ev.touches[0].clientX:ev.clientX)-r.left;
+  const {pad,iw,n,X}=CUR.geom;
+  let i=Math.round(((px-pad.l)/iw)*(n-1));
+  i=Math.max(0,Math.min(n-1,i));
+  drawEquity(CUR.sel,CUR.bh,i);
+  const tip=el("tip");
+  tip.innerHTML=`<div class="r"><span>${DATA.dates[i]}</span></div>`
+    +`<div class="r"><span><span class="d" style="background:${css("--accent")}"></span>model</span>`
+    +`<span>${CUR.sel[i].toFixed(3)}x</span></div>`
+    +`<div class="r"><span><span class="d" style="background:${css("--mid")}"></span>buy &amp; hold</span>`
+    +`<span>${CUR.bh[i].toFixed(3)}x</span></div>`;
+  tip.classList.add("on");
+  const tw=tip.offsetWidth, left=Math.min(Math.max(X(i)-tw/2,4),c.clientWidth-tw-4);
+  tip.style.left=left+"px"; tip.style.top="6px";
+}
+function hideTip(){
+  el("tip").classList.remove("on");
+  if(CUR.sel) drawEquity(CUR.sel,CUR.bh,null);
 }
 function updatePanel(){
   const tk=el("ticker").value, mdl=el("model").value, sch=el("scheme").value;
   const emb=+el("embargo").value, cost=+el("cost").value, lag=+el("lag").value;
   el("embVal").textContent=emb; el("costVal").textContent=cost;
-  el("embWrap").disabled = sch!=="purged";
+  el("embWrap").disabled=sch!=="purged";
   const t=DATA.tickers[tk], rets=t.returns;
-  const key = sch==="purged" ? `purged|${emb}` : sch;
+  const key=sch==="purged"?`purged|${emb}`:sch;
   const sel=runBT(decodeRLE(t.positions[mdl][key],rets.length),rets,cost,lag);
-  const bh =runBT(decodeRLE(t.positions.buy_and_hold[key],rets.length),rets,cost,lag);
+  const bh=runBT(decodeRLE(t.positions.buy_and_hold[key],rets.length),rets,cost,lag);
   const s=statsOf(sel);
   el("s-sharpe").textContent=s.sharpe.toFixed(2);
   el("s-se").textContent=s.se.toFixed(2);
@@ -679,54 +936,37 @@ function updatePanel(){
   el("s-to").textContent=s.turnover.toFixed(1);
   el("s-ex").textContent=(s.exposure*100).toFixed(0)+"%";
   el("legSel").textContent=nice(mdl);
-  drawEquity([{y:bh.eq,color:css("--mid"),w:1.3},{y:sel.eq,color:css("--accent"),w:2}]);
-  const isCtl = sch==="control_kfold";
-  el("banner").className = "box" + (isCtl?" flag":"");
-  el("banner").innerHTML = isCtl
-    ? "<span class=\"tag\">You are looking at the control</span><p>Standard K-fold is wrong for this data and we run it on purpose, so we can measure what purging changes. Do not read it as a result.</p>"
-    : `<p>Pre-holdout, out of fold. Last day ${DATA.dates[DATA.dates.length-1]}; the 2023–2025 holdout is not in this file.</p>`;
+  el("lab-sub").textContent=`${tk} · ${nice(mdl)}`;
+  CUR.sel=sel.eq; CUR.bh=bh.eq;
+  drawEquity(sel.eq,bh.eq,null);
+  const isCtl=sch==="control_kfold";
+  el("banner").className="note"+(isCtl?" flag":"");
+  el("banner").innerHTML=isCtl
+    ?'<span class="tag">You are looking at the control</span><p>Standard K-fold is wrong for this data and we run it on purpose, so we can measure what purging changes. Do not read it as a result.</p>'
+    :`<p>Pre-holdout, out of fold. Last day ${DATA.dates[DATA.dates.length-1]}; the 2023–2025 holdout is not in this file.</p>`;
+}
+
+/* ---------- copy ---------- */
+function wireCopy(){
+  el("copy").addEventListener("click",async()=>{
+    const txt=el("cmds").innerText;
+    const done=()=>{el("copy").textContent="Copied";setTimeout(()=>el("copy").textContent="Copy",1600);};
+    try{ await navigator.clipboard.writeText(txt); done(); }
+    catch{ const r=document.createRange(); r.selectNodeContents(el("cmds"));
+      const s=getSelection(); s.removeAllRanges(); s.addRange(r);
+      el("copy").textContent="Press Ctrl+C"; setTimeout(()=>el("copy").textContent="Copy",2200); }
+  });
 }
 
 /* ---------- boot ---------- */
-function renderTables(){
-  // Every table is optional. A results CSV that has not been generated yet
-  // should leave one table empty, not throw and take the interactive panel
-  // down with it.
-  if(!F || !Object.keys(F).length){ el("built").textContent =
-    "Results tables are not built yet. Run scripts/build_site_findings.py."; return; }
-  if(F.data) table("t-data", [["pre_holdout","rows used",fx.n(0)],["label_1","label 1",fx.n(3)],
-    ["first","from",String],["last","to",String]],
-    F.data.map(r=>[r.ticker,r]), "Fund");
-  if(F.auc) table("t-auc", Object.keys(F.auc.logistic||{}).map(c=>
-    [c,nice(c),fx.n(4), r=>c==="purged_kfold"&&r[c]>F.floor_synthetic?"hi":""]),
-    byModel(F.auc), "Model");
-  if(F.gap_range) table("t-gap", [["min","min",fx.k(2)],["max","max",fx.k(2)],
-    ["mean","mean",fx.k(2)],["paired_se","paired s.e.",fx.k(2)]], byModel(F.gap_range), "Model");
-  if(F.strategy) table("t-strategy", [["sharpe","Sharpe",fx.n(3)],["sharpe_se","s.e.",fx.n(3)],
-    ["max_drawdown","max DD",fx.pc(1)],["turnover","turnover",fx.n(1)],
-    ["exposure","exposure",fx.pc(0)],["matched","matched",fx.n(3)],["dsr","DSR",fx.n(3)]],
-    byModel(F.strategy), "Model");
-  if(F.barrier_sensitivity) table("t-bw", [["label1","label 1",fx.n(3)],
-    ["timeout","timeout",fx.pc(0)],["window","window (bars)",fx.n(1)],
-    ["effN","effective N",fx.n(0)],["auc","AUC",fx.n(4)],["floor","floor",fx.n(4)],
-    ["lift","lift",fx.n(4), r=>r.lift>0.04?"hi":""]],
-    Object.keys(F.barrier_sensitivity).map(k=>[(+k).toFixed(1)+"σ",F.barrier_sensitivity[k]]),
-    "Barrier width");
-  if(F.holdout) table("t-holdout", [["auc","AUC",fx.n(4)],["precision","precision",fx.n(3)],
-    ["coverage","coverage",fx.pc(0)],["sharpe","Sharpe",fx.n(3)],["sharpe_t","t",fx.n(2)],
-    ["total_return","total",fx.pc(0)],["dsr","DSR",fx.n(3)]], byModel(F.holdout), "Model");
-  el("built").textContent = `Built ${DATA.meta.built}. Barriers ±${DATA.meta.barrier_mult}σ, `
-    + `${DATA.meta.horizon_days}-bar horizon, ${DATA.meta.n_folds} folds.`;
-}
-
-fetch("data.json").then(r=>{if(!r.ok)throw 0; return r.json();}).then(d=>{
+spy(); wireCopy();
+fetch("data.json").then(r=>{if(!r.ok)throw 0;return r.json();}).then(d=>{
   DATA=d; F=d.findings||{};
   renderTables();
   if(F.label_demo){
-    const n=F.label_demo.dates.length;
-    const sl=el("ld-slider");
+    const n=F.label_demo.dates.length, sl=el("ld-slider");
     sl.max=String(n-11); sl.value=String(Math.min(60,n-11));
-    document.querySelector('label[for="ld-slider"]').innerHTML =
+    document.querySelector('label[for="ld-slider"]').innerHTML=
       `Day · <span class="v" id="ld-i">0</span> of ${n-11}`;
     sl.addEventListener("input",drawLabel);
     drawLabel();
@@ -739,13 +979,19 @@ fetch("data.json").then(r=>{if(!r.ok)throw 0; return r.json();}).then(d=>{
   el("model").value="logistic";
   for(const id of ["ticker","model","scheme","embargo","cost","lag"])
     el(id).addEventListener("input",updatePanel);
+  const c=el("chart");
+  c.addEventListener("mousemove",moveTip);
+  c.addEventListener("mouseleave",hideTip);
+  c.addEventListener("touchmove",e=>{e.preventDefault();moveTip(e);},{passive:false});
+  c.addEventListener("touchend",hideTip);
   window.addEventListener("resize",()=>{drawLabel();drawFolds();updatePanel();});
   updatePanel();
 }).catch(()=>{
-  el("banner").className="box flag";
-  el("banner").innerHTML="<p><b>Could not load data.json.</b> Browsers block file reads from "
-    +"<code>file://</code>. Serve the folder instead: run <code>python -m http.server 8000</code> "
-    +"inside <code>docs/</code> and open <code>http://localhost:8000</code>.</p>";
+  el("banner").className="note flag";
+  el("banner").innerHTML='<span class="tag">Could not load data.json</span><p>Browsers block '
+    +'file reads from <code>file://</code>. Serve the folder instead: run '
+    +'<code>python -m http.server 8000</code> inside <code>docs/</code> and open '
+    +'<code>http://localhost:8000</code>.</p>';
 });
 </script>
 </body>

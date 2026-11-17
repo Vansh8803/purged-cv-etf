@@ -1621,6 +1621,60 @@ bars fails as it should.
 The review's second recommendation, that `docs/data.json` stay committed with
 all 16 findings keys, follows from the second fix and now holds.
 
+### 2026-11-17 · Aksh's audit, and the two sections we had already lost
+
+Vansh reviewed `planning/AUDIT_AND_ACTION_PLAN.md`, written by Aksh with an
+assistant. Its Section 1 repeats the four bugs from the PDF review, which we
+had already dealt with. Its Section 2 proposes a frontend rebuild and says an
+enhanced version "has been built and tested" at `docs/enhanced.html`. **That
+file does not exist in the repository.** Nothing was lost, but the plan
+describes work that was not delivered, and we should not have taken it on
+trust.
+
+**The important finding was ours, not theirs.** Checking the site against the
+submission instructions line by line showed it was missing two of the eight
+required items. There was no description of our preprocessing choices -- no
+mention of the one-bar shift, the in-fold scaler, or why `sigma` is withheld --
+and no section on the baseline and the models at all. Meta-labelling appeared
+nowhere on the page.
+
+Both were cut on 2026-11-15 when the site was trimmed for being too long. That
+trim went too far and took required content with it. The page now has §5
+Preprocessing and §6 The models, and every one of the eight requirements is
+checked by a script rather than by eye.
+
+**What we took from the frontend proposal.** A sticky section rail with
+scroll-spy, because thirteen sections is a lot to navigate and a grader needs
+to find the eight required ones. A crosshair and inspection tooltip on the
+equity chart, which turns a picture into something you can read values off.
+Styled range sliders, since the native ones look unfinished. A reproduce block
+with copy-to-clipboard, which shortens the path from the site to checking it.
+
+**What we turned down, and why.**
+
+*The dark/light toggle.* Our identity is warm oat paper. A dark variant of that
+is not the same design, it is a second design, and maintaining two would double
+the surface for three canvases and the contrast work we just did. A theme
+switcher is also one of the most common signals that a page was generated
+rather than designed. One committed light theme, deliberately.
+
+*A separate reading-progress bar.* The scroll-spy rail already says where you
+are and, unlike a bar, lets you jump. Two indicators for one job.
+
+*Their Fix 2, auto-running the data build through `subprocess`.* A script whose
+job is to verify the data should not quietly regenerate it. Ours names the two
+commands instead.
+
+*Their Fix 3, a flat 2% position tolerance for `gbt` only.* Two problems. 2% of
+4,312 bars is 86 bars of slack. And it exempts the wrong model: logistic has
+*more* predictions near the 0.5 boundary than the trees do, 17 against 14 on
+GLD, so their rule would still fail across machines on the model they left
+strict. Ours splits on whether a model is fitted at all, allows 1%, reports it,
+and still requires the statistics to match.
+
+Contrast was re-checked across all fifteen foreground and background pairs
+after the rebuild. No failures.
+
 ---
 ## Open questions
 
