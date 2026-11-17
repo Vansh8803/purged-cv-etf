@@ -180,8 +180,8 @@ class NaiveKFold:
     detail. Contiguous is the default because `sklearn.KFold` does not shuffle
     either, so it is what "standard 5-fold K-fold" means. Shuffling scatters
     each fold's rows across the whole sample, which puts a training row next to
-    a test row almost everywhere and leaks far more -- 88.5% of training rows
-    against 0.33%, measured on SPY, see decision-log.md 2026-11-03.
+    a test row almost everywhere and leaks far more -- 88% of training rows
+    against 0.33%, measured on SPY. See decision-log.md, 2026-11-10.
     """
 
     def __init__(self, t1, bar_index=None, n_splits=5, shuffle=False, seed=None):
@@ -218,9 +218,9 @@ def leakage(cv, t1):
     """How much of a scheme's training data overlaps the fold it is scored on.
 
     The number the headline rests on, so it lives here with a test rather than
-    in a notebook -- the first version of these figures could not be reproduced
-    (decision-log.md 2026-11-03) and a number that cannot be reproduced is
-    worse in a write-up than in a pull request.
+    in a notebook. An earlier version of these figures came from a throwaway
+    script and could not be reproduced, and a number that cannot be reproduced
+    is worse in a write-up than in a pull request.
 
     Counted pairwise: each training row against each individual test label
     window, which is the definition. Not against the fold's [min t, max t1]

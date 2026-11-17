@@ -100,7 +100,7 @@ def main() -> int:
     print(shown.round(4).to_string())
     print(f"  lift_vs_floor = purged AUC - {NO_SIGNAL_FLOOR}, the measured "
           f"no-signal floor. Its own uncertainty is wider than this lift; "
-          f"see the 2026-11-14 review entry.")
+          f"see decision-log.md, 2026-11-10.")
 
     # Pooled over folds, and shown with coverage and the positive rate.
     # Precision alone rewards abstention -- a model acting once and getting it
